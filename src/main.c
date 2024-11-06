@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-
+#include <signal.h>
 #include <event2/event.h>
 #include <event2/dns.h>
 #include <arpa/inet.h>
@@ -15,6 +15,8 @@
 
 #define SERVER_ADDRESS "127.0.0.1"
 #define SERVER_PORT 9876
+
+#define UNUSED __attribute__((unused))
 
 typedef struct _jojodns_t
 {
@@ -73,9 +75,20 @@ static void run()
     event_base_dispatch(jojodns.base);
 }
 
+void handle_sigint(UNUSED int sig)
+{
+    log_info("Received SIGINT. Shutting down...");
+    if (jojodns.base != NULL)
+    {
+        event_base_loopexit(jojodns.base, NULL);
+    }
+}
+
 int main()
 {
     logging_init(NAME, LOG_LEVEL);
+
+    signal(SIGINT, handle_sigint);
 
     if (!init())
     {
@@ -83,7 +96,7 @@ int main()
         return 1;
     }
 
-    log_info("Started %s", NAME);
+    log_info("Started %s on address %s port %d", NAME, SERVER_ADDRESS, SERVER_PORT);
 
     run();
 
