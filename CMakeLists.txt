@@ -1,10 +1,27 @@
 cmake_minimum_required(VERSION 3.10)
 project(JojoDNS C)
 
+# Set the C standard
+set(CMAKE_C_STANDARD 99)
+
+# Set the compiler flags
+set(CMAKE_C_FLAGS "-Wall -Wextra -Werror -pedantic -std=c99")
+
+# Find libevent package using PkgConfig
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBEVENT REQUIRED libevent)
 
-add_executable(jojodns jojodns.c)
+# Include directories for libevent
+include_directories(${LIBEVENT_INCLUDE_DIRS} "include")
 
-target_include_directories(jojodns PRIVATE ${LIBEVENT_INCLUDE_DIRS})
+
+# Define the executable and list the source files
+add_executable(jojodns
+    src/main.c
+    src/logging.c
+    src/client.c
+    src/server.c)
+
+# Link the executable with libevent
 target_link_libraries(jojodns ${LIBEVENT_LIBRARIES})
+
