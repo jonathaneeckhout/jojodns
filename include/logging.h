@@ -7,6 +7,7 @@
 
 void logging_init(const char *name, int log_level);
 void logging_cleanup();
+void logging_set_log_level(int log_level);
 
 #define log_error(...) syslog(LOG_ERR, __VA_ARGS__)
 #define log_warning(...) syslog(LOG_WARNING, __VA_ARGS__)

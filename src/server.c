@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
 
 #include <event2/dns_struct.h>
 
@@ -197,18 +198,10 @@ static void server_dns_request_callback(struct evdns_server_request *req, void *
     }
 }
 
-server_t *server_init(struct event_base *base, client_t *client, const char *address, int port)
+static evutil_socket_t server_bind_address_socket(const char *address, int port)
 {
-    evutil_socket_t sock;
+    evutil_socket_t sock = 0;
     struct sockaddr_in addr;
-    server_t *server = (server_t *)calloc(1, sizeof(server_t));
-    if (server == NULL)
-    {
-        log_error("Failed to allocate memory for server_t");
-        goto exit_0;
-    }
-
-    server->client = client;
 
     sock = socket(PF_INET, SOCK_DGRAM, 0);
     if (sock == -1)
@@ -218,6 +211,8 @@ server_t *server_init(struct event_base *base, client_t *client, const char *add
     }
 
     evutil_make_socket_nonblocking(sock);
+
+    memset(&addr, 0, sizeof(struct sockaddr_in));
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = inet_addr(address);
@@ -226,6 +221,86 @@ server_t *server_init(struct event_base *base, client_t *client, const char *add
     {
         log_error("Failed to bind to server socket");
         goto exit_2;
+    }
+
+    log_info("DNS relay server socket bound to address=[%s] on port=[%d]", address, port);
+
+    return sock;
+
+exit_2:
+    close(sock);
+exit_1:
+    return -1;
+}
+
+static evutil_socket_t server_bind_interface_socket(const char *interface, int port)
+{
+    evutil_socket_t sock = 0;
+    struct sockaddr_in addr;
+
+    sock = socket(PF_INET, SOCK_DGRAM, 0);
+    if (sock == -1)
+    {
+        log_error("Failed to create server socket");
+        goto exit_1;
+    }
+
+    evutil_make_socket_nonblocking(sock);
+
+    if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, interface, strlen(interface)) != 0)
+    {
+        perror("setsockopt SO_BINDTODEVICE failed");
+        close(sock);
+        return 1;
+    }
+
+    memset(&addr, 0, sizeof(struct sockaddr_in));
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+        log_error("Failed to bind to server socket");
+        goto exit_2;
+    }
+
+    log_info("DNS relay server socket bound to interface=[%s] on port=[%d]", interface, port);
+
+    return sock;
+
+exit_2:
+    close(sock);
+exit_1:
+    return -1;
+}
+
+server_t *server_init(struct event_base *base, client_t *client, UNUSED const char *interface, const char *address, int port)
+{
+    evutil_socket_t sock;
+    server_t *server = (server_t *)calloc(1, sizeof(server_t));
+    if (server == NULL)
+    {
+        log_error("Failed to allocate memory for server_t");
+        goto exit_0;
+    }
+
+    server->client = client;
+
+    if (interface != NULL && strlen(interface) > 0)
+    {
+        sock = server_bind_interface_socket(interface, port);
+    }
+    else
+    {
+        sock = server_bind_address_socket(address, port);
+    }
+
+    if (sock < 0)
+    {
+        log_error("Failed to bind to server socket");
+        goto exit_1;
     }
 
     server->dns_server = evdns_add_server_port_with_base(base, sock, 0, server_dns_request_callback, server);

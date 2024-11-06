@@ -13,7 +13,7 @@ typedef struct _server_t
     cache_t *cache;
 } server_t;
 
-server_t *server_init(struct event_base *base, client_t *client, const char *address, int port);
+server_t *server_init(struct event_base *base, client_t *client, const char *interface, const char *address, int port);
 void server_cleanup(server_t **server);
 
 #endif
