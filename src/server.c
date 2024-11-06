@@ -13,11 +13,12 @@
 
 typedef struct _server_request_t
 {
+    server_t *server;
     struct evdns_server_request *req;
-    struct evdns_server_question *q;
+    char *name;
 } server_request_t;
 
-static server_request_t *server_request_init(struct evdns_server_request *req, struct evdns_server_question *q)
+static server_request_t *server_request_init(server_t *server, struct evdns_server_request *req, const char *name)
 {
     server_request_t *server_request = (server_request_t *)malloc(sizeof(server_request_t));
     if (server_request == NULL)
@@ -26,11 +27,19 @@ static server_request_t *server_request_init(struct evdns_server_request *req, s
         goto exit_0;
     }
 
+    server_request->server = server;
     server_request->req = req;
-    server_request->q = q;
+
+    server_request->name = strdup(name);
+    if (!server_request->name)
+    {
+        log_error("Failed to allocate memory for name");
+        goto exit_1;
+    }
 
     return server_request;
-
+exit_1:
+    free(server_request);
 exit_0:
     return NULL;
 }
@@ -42,59 +51,93 @@ static void server_request_cleanup(server_request_t **server_request)
         return;
     }
 
+    if ((*server_request)->name != NULL)
+    {
+        free((*server_request)->name);
+    }
+
     free(*server_request);
     *server_request = NULL;
 }
 
-static void
-server_dns_response_ipv4_callback(int result, UNUSED char type, int count, int ttl, void *addresses, void *arg)
+static void server_dns_response_ipv4_callback(int result, char type, int count, int ttl, void *addresses, void *arg)
 {
     server_request_t *server_request = (server_request_t *)arg;
     struct in_addr *addr_list = (struct in_addr *)addresses;
 
     if (result != DNS_ERR_NONE)
     {
-        log_warning("Server failed to process dns query for name=[%s]", server_request->q->name);
+        log_warning("Server failed to process dns query for name=[%s]", server_request->name);
         evdns_server_request_respond(server_request->req, DNS_ERR_SERVERFAILED);
         goto exit;
     }
 
     if (count == 0)
     {
-        log_info("Server resolve dns query for name=[%s]", server_request->q->name);
+        log_info("Server resolve dns query for name=[%s]", server_request->name);
         evdns_server_request_respond(server_request->req, DNS_ERR_NODATA);
         goto exit;
     }
 
     for (int i = 0; i < count; ++i)
     {
-        evdns_server_request_add_a_reply(server_request->req, server_request->q->name, 1, &addr_list[i].s_addr, ttl);
+        evdns_server_request_add_a_reply(server_request->req, server_request->name, 1, &addr_list[i].s_addr, ttl);
     }
 
-    evdns_server_request_respond(server_request->req, 0);
+    evdns_server_request_respond(server_request->req, DNS_ERR_NONE);
+
+    cache_add_entry(server_request->server->cache, server_request->name, type, count, ttl, addr_list);
 
 exit:
     server_request_cleanup(&server_request);
 }
 
+static void server_dns_send_cache_response_ipv4(struct evdns_server_request *req, const cache_entry_t *entry)
+{
+    for (int i = 0; i < entry->count; ++i)
+    {
+        evdns_server_request_add_a_reply(req, entry->name, 1, &entry->addr_list[i].s_addr, entry->ttl);
+    }
+
+    evdns_server_request_respond(req, DNS_ERR_NONE);
+}
+
 static void server_dns_request_callback(struct evdns_server_request *req, void *data)
 {
+
     server_t *server = (server_t *)data;
+    struct evdns_server_question *q = NULL;
+    const cache_entry_t *cache_entry = NULL;
 
-    for (int i = 0; i < req->nquestions; ++i)
+    if (req->questions == NULL || req->nquestions <= 0)
     {
-        struct evdns_server_question *q = req->questions[i];
+        log_error("Invalid DNS questions or no questions available");
+        evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
+        return;
+    }
 
-        server_request_t *server_request = server_request_init(req, q);
+    // Only one question a time is currently supported
+    q = req->questions[0];
+
+    log_debug("Received dns query for name=[%s], class=[%d], type=[%d]", q->name, q->class, q->type);
+
+    cache_entry = cache_get_entry(server->cache, q->name);
+    if (cache_entry != NULL)
+    {
+        server_dns_send_cache_response_ipv4(req, cache_entry);
+        return;
+    }
+    else
+    {
+        server_request_t *server_request = server_request_init(server, req, q->name);
         if (server_request == NULL)
         {
             evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
             return;
         }
 
-        log_debug("Received dns query for name=[%s], class=[%d], type=[%d]", q->name, q->class, q->type);
-
         evdns_base_resolve_ipv4(server->client->dns_base, q->name, 0, server_dns_response_ipv4_callback, server_request);
+        return;
     }
 }
 
@@ -136,8 +179,17 @@ server_t *server_init(struct event_base *base, client_t *client, const char *add
         goto exit_2;
     }
 
+    server->cache = cache_init();
+    if (server->cache == NULL)
+    {
+        log_error("Failed to init the cache");
+        goto exit_3;
+    }
+
     return server;
 
+exit_3:
+    evdns_close_server_port(server->dns_server);
 exit_2:
     close(sock);
 exit_1:
@@ -153,7 +205,15 @@ void server_cleanup(server_t **server)
         return;
     }
 
-    evdns_close_server_port((*server)->dns_server);
+    if ((*server)->cache != NULL)
+    {
+        cache_cleanup(&(*server)->cache);
+    }
+
+    if ((*server)->dns_server != NULL)
+    {
+        evdns_close_server_port((*server)->dns_server);
+    }
 
     free(*server);
     *server = NULL;
