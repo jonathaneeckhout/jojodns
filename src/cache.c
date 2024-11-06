@@ -7,7 +7,7 @@
 
 #define UNUSED __attribute__((unused))
 
-cache_entry_t *cache_entry_init(const char *name, char type, int count, int ttl, struct in_addr *addr_list)
+cache_entry_t *cache_entry_init(const char *name, char type, int count, int ttl, struct in_addr *a_addr_list, struct in6_addr *aaaa_addr_list)
 {
     cache_entry_t *entry = (cache_entry_t *)malloc(sizeof(cache_entry_t));
     if (!entry)
@@ -27,17 +27,42 @@ cache_entry_t *cache_entry_init(const char *name, char type, int count, int ttl,
     entry->count = count;
     entry->ttl = ttl;
 
-    entry->addr_list = (struct in_addr *)malloc(sizeof(struct in_addr) * count);
-    if (!entry->addr_list)
+    if (a_addr_list != NULL)
     {
-        log_error("Failed to allocate memory for addr_list");
-        goto exit_2;
+        entry->a_addr_list = (struct in_addr *)malloc(sizeof(struct in_addr) * count);
+        if (!entry->a_addr_list)
+        {
+            log_error("Failed to allocate memory for addr_list");
+            goto exit_2;
+        }
+
+        memcpy(entry->a_addr_list, a_addr_list, sizeof(struct in_addr) * count);
+    }
+    else
+    {
+        entry->a_addr_list = NULL;
     }
 
-    memcpy(entry->addr_list, addr_list, sizeof(struct in_addr) * count);
+    if (aaaa_addr_list != NULL)
+    {
+        entry->aaaa_addr_list = (struct in6_addr *)malloc(sizeof(struct in6_addr) * count);
+        if (!entry->aaaa_addr_list)
+        {
+            log_error("Failed to allocate memory for addr_list");
+            goto exit_3;
+        }
+
+        memcpy(entry->aaaa_addr_list, aaaa_addr_list, sizeof(struct in6_addr) * count);
+    }
+    else
+    {
+        entry->aaaa_addr_list = NULL;
+    }
 
     return entry;
 
+exit_3:
+    free(entry->a_addr_list);
 exit_2:
     free(entry->name);
 exit_1:
@@ -54,7 +79,8 @@ void cache_entry_cleanup(cache_entry_t **entry)
     }
 
     free((*entry)->name);
-    free((*entry)->addr_list);
+    free((*entry)->a_addr_list);
+    free((*entry)->aaaa_addr_list);
 
     free(*entry);
     *entry = NULL;
@@ -65,12 +91,13 @@ static void cache_free(void *item)
     cache_entry_t *entry = item;
 
     free(entry->name);
-    free(entry->addr_list);
+    free(entry->a_addr_list);
+    free(entry->aaaa_addr_list);
 }
 
-void cache_add_entry(cache_t *cache, char *name, char type, int count, int ttl, struct in_addr *addr_list)
+void cache_add_entry(cache_t *cache, char *name, char type, int count, int ttl, struct in_addr *a_addr_list, struct in6_addr *aaaa_addr_list)
 {
-    cache_entry_t *entry = cache_entry_init(name, type, count, ttl, addr_list);
+    cache_entry_t *entry = cache_entry_init(name, type, count, ttl, a_addr_list, aaaa_addr_list);
 
     const cache_entry_t *old_entry = hashmap_delete(cache->hmap, entry);
     if (old_entry != NULL)
