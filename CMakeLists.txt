@@ -30,3 +30,7 @@ add_executable(jojodns
 # Link the executable with libevent
 target_link_libraries(jojodns ${LIBEVENT_LIBRARIES} hashmapc)
 
+
+INSTALL(TARGETS jojodns
+	RUNTIME DESTINATION bin
+)
