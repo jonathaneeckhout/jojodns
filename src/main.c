@@ -18,6 +18,7 @@
 #define DEFAULT_SERVER_INTERFACE ""
 #define DEFAULT_SERVER_ADDRESS "127.0.0.1"
 #define DEFAULT_SERVER_PORT 9876
+#define DEFAULT_CLIENT_NAMESERVER ""
 #define DEFAULT_CONFIG_FILE ""
 
 #define UNUSED __attribute__((unused))
@@ -37,6 +38,7 @@ struct arguments
     char *address;
     char *interface;
     int port;
+    char *nameserver;
     char *config_file;
 };
 
@@ -49,6 +51,7 @@ static struct argp_option options[] = {
     {"address", 'a', "ADDRESS", 0, "IP address to bind to", 0},
     {"interface", 'i', "INTERFACE", 0, "Network interface to bind to. If set address argument is ingored", 0},
     {"port", 'p', "PORT", 0, "Port number to bind to", 0},
+    {"nameserver", 'n', "NAMESERVER", 0, "Which forward nameserver to use. If not set, values from /etc/resolv.conf will be used", 0},
     {"config", 'c', "CONFIG_FILE", 0, "Path to the configuration file", 0},
     {"log-level", 'l', "LEVEL", 0, "Syslog log level (e.g., debug, info, warning, error)", 0},
     {0}};
@@ -67,6 +70,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         break;
     case 'p':
         arguments->port = atoi(arg);
+        break;
+    case 'n':
+        arguments->nameserver = arg;
         break;
     case 'c':
         arguments->config_file = arg;
@@ -121,7 +127,7 @@ static bool init(struct arguments *arguments)
         goto exit_0;
     }
 
-    jojodns.client = client_init(jojodns.base);
+    jojodns.client = client_init(jojodns.base, arguments->nameserver);
     if (jojodns.client == NULL)
     {
         log_error("Failed to init client");
