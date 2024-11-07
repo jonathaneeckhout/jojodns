@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <event2/dns.h>
 
 #include "logging.h"
 #include "client.h"
@@ -16,11 +17,12 @@ client_t *client_init(struct event_base *base, const char *nameserver)
 
     if (nameserver != NULL && strlen(nameserver) > 0)
     {
-        client->dns_base = evdns_base_new(base, 0);
+        client->dns_base = evdns_base_new(base, 0x0);
     }
     else
     {
-        client->dns_base = evdns_base_new(base, EVDNS_BASE_NAMESERVERS_NO_DEFAULT);
+        log_info("Starting DNS client and resolving /etc/resolv.conf");
+        client->dns_base = evdns_base_new(base, EVDNS_BASE_INITIALIZE_NAMESERVERS);
     }
 
     if (client->dns_base == NULL)

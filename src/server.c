@@ -164,11 +164,12 @@ static void server_dns_request_callback(struct evdns_server_request *req, void *
     // Only one question a time is currently supported
     q = req->questions[0];
 
-    log_debug("Received dns query for name=[%s], class=[%d], type=[%d]", q->name, q->dns_question_class, q->type);
+    log_debug("Received DNS query for name=[%s], class=[%d], type=[%d]", q->name, q->dns_question_class, q->type);
 
     cache_entry = cache_get_entry(server->cache, q->name);
     if (cache_entry != NULL && cache_entry->type == q->type)
     {
+        log_debug("Cache hit DNS query name=[%s]", q->name);
         server_dns_send_cache_response(req, cache_entry);
         return;
     }
@@ -184,11 +185,25 @@ static void server_dns_request_callback(struct evdns_server_request *req, void *
         switch (q->type)
         {
         case EVDNS_TYPE_A:
-            evdns_base_resolve_ipv4(server->client->dns_base, q->name, 0, server_dns_response_ipv4_callback, server_request);
+        {
+            struct evdns_request *new_req = evdns_base_resolve_ipv4(server->client->dns_base, q->name, 0, server_dns_response_ipv4_callback, server_request);
+            if (new_req == NULL)
+            {
+                evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
+                server_request_cleanup(&server_request);
+            }
             break;
+        }
         case EVDNS_TYPE_AAAA:
-            evdns_base_resolve_ipv6(server->client->dns_base, q->name, 0, server_dns_response_ipv6_callback, server_request);
+        {
+            struct evdns_request *new_req = evdns_base_resolve_ipv6(server->client->dns_base, q->name, 0, server_dns_response_ipv6_callback, server_request);
+            if (new_req == NULL)
+            {
+                evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
+                server_request_cleanup(&server_request);
+            }
             break;
+        }
         default:
             evdns_server_request_respond(req, DNS_ERR_NOTIMPL);
             server_request_cleanup(&server_request);
@@ -310,7 +325,7 @@ server_t *server_init(struct event_base *base, client_t *client, UNUSED const ch
         goto exit_2;
     }
 
-    server->cache = cache_init();
+    server->cache = cache_init(base);
     if (server->cache == NULL)
     {
         log_error("Failed to init the cache");

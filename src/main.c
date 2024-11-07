@@ -183,6 +183,7 @@ int main(int argc, char *argv[])
     arguments.interface = DEFAULT_SERVER_INTERFACE;
     arguments.address = DEFAULT_SERVER_ADDRESS;
     arguments.port = DEFAULT_SERVER_PORT;
+    arguments.nameserver = DEFAULT_CLIENT_NAMESERVER;
     arguments.config_file = DEFAULT_CONFIG_FILE;
 
     argp_parse(&argp, argc, argv, 0, 0, &arguments);

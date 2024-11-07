@@ -2,12 +2,16 @@
 #define SERVER_CACHE_H
 
 #include <hashmap.h>
+#include <event2/event.h>
 
 typedef struct _cache_t
 {
     struct hashmap *hmap;
+    uint size;
     int max_ttl;
     int min_ttl;
+    struct event *expiration_timer;
+    struct timeval expiration_timer_interval;
 } cache_t;
 
 typedef struct _cache_entry_t
@@ -21,7 +25,7 @@ typedef struct _cache_entry_t
     time_t expiration_time;
 } cache_entry_t;
 
-cache_t *cache_init();
+cache_t *cache_init(struct event_base *base);
 void cache_cleanup(cache_t **cache);
 
 cache_entry_t *cache_entry_init(const char *name, char type, int count, int ttl, struct in_addr *a_addr_list, struct in6_addr *aaaa_addr_list, time_t expiration_time);
