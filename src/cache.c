@@ -7,7 +7,7 @@
 
 #define UNUSED __attribute__((unused))
 
-cache_entry_t *cache_entry_init(const char *name, char type, int count, int ttl, struct in_addr *a_addr_list, struct in6_addr *aaaa_addr_list)
+cache_entry_t *cache_entry_init(const char *name, char type, int count, int ttl, struct in_addr *a_addr_list, struct in6_addr *aaaa_addr_list, time_t expiration_time)
 {
     cache_entry_t *entry = (cache_entry_t *)malloc(sizeof(cache_entry_t));
     if (!entry)
@@ -59,6 +59,8 @@ cache_entry_t *cache_entry_init(const char *name, char type, int count, int ttl,
         entry->aaaa_addr_list = NULL;
     }
 
+    entry->expiration_time = expiration_time;
+
     return entry;
 
 exit_3:
@@ -97,7 +99,7 @@ static void cache_free(void *item)
 
 void cache_add_entry(cache_t *cache, char *name, char type, int count, int ttl, struct in_addr *a_addr_list, struct in6_addr *aaaa_addr_list)
 {
-    cache_entry_t *entry = cache_entry_init(name, type, count, ttl, a_addr_list, aaaa_addr_list);
+    cache_entry_t *entry = cache_entry_init(name, type, count, ttl, a_addr_list, aaaa_addr_list, 0);
 
     const cache_entry_t *old_entry = hashmap_delete(cache->hmap, entry);
     if (old_entry != NULL)
