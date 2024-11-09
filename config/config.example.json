@@ -1,0 +1,25 @@
+{
+    "Relay": {
+        "Enable": true,
+        "Config": [
+            {
+                "Alias": "lan-relay",
+                "Forwarders": "google",
+                "Interface": "br-lan",
+                "Address": "",
+                "Port": 53,
+                "CacheSize": 4000,
+                "CacheMinTTL": 0,
+                "CacheMaxTTL": 86400
+            }
+        ],
+        "Forwarding": [
+            {
+                "Enable": true,
+                "Alias": "google",
+                "DNSServer": "8.8.8.8",
+                "Type": "Static"
+            }
+        ]
+    }
+}
