@@ -265,8 +265,7 @@ static evutil_socket_t server_bind_interface_socket(const char *interface, int p
     if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, interface, strlen(interface)) != 0)
     {
         perror("setsockopt SO_BINDTODEVICE failed");
-        close(sock);
-        return 1;
+        goto exit_2;
     }
 
     memset(&addr, 0, sizeof(struct sockaddr_in));
@@ -291,7 +290,7 @@ exit_1:
     return -1;
 }
 
-server_t *server_init(struct event_base *base, client_t *client, UNUSED const char *interface, const char *address, int port)
+server_t *server_init(struct event_base *base, const char *name, client_t *client, const char *interface, const char *address, int port)
 {
     evutil_socket_t sock;
     server_t *server = (server_t *)calloc(1, sizeof(server_t));
@@ -299,6 +298,19 @@ server_t *server_init(struct event_base *base, client_t *client, UNUSED const ch
     {
         log_error("Failed to allocate memory for server_t");
         goto exit_0;
+    }
+
+    if (name == NULL || strlen(name) == 0)
+    {
+        log_error("Server's name is NULL or empty. This is not allowed");
+        goto exit_1;
+    }
+
+    server->name = strdup(name);
+    if (!server->name)
+    {
+        log_error("Failed to allocate memory for name");
+        goto exit_1;
     }
 
     server->client = client;
@@ -315,29 +327,31 @@ server_t *server_init(struct event_base *base, client_t *client, UNUSED const ch
     if (sock < 0)
     {
         log_error("Failed to bind to server socket");
-        goto exit_1;
+        goto exit_2;
     }
 
     server->dns_server = evdns_add_server_port_with_base(base, sock, 0, server_dns_request_callback, server);
     if (server->dns_server == NULL)
     {
         log_error("Failed to create dns server");
-        goto exit_2;
+        goto exit_3;
     }
 
     server->cache = cache_init(base);
     if (server->cache == NULL)
     {
         log_error("Failed to init the cache");
-        goto exit_3;
+        goto exit_4;
     }
 
     return server;
 
-exit_3:
+exit_4:
     evdns_close_server_port(server->dns_server);
-exit_2:
+exit_3:
     close(sock);
+exit_2:
+    free(server->name);
 exit_1:
     free(server);
 exit_0:
@@ -354,6 +368,11 @@ void server_cleanup_content(server_t *server)
     if (server->dns_server != NULL)
     {
         evdns_close_server_port(server->dns_server);
+    }
+
+    if (server->name != NULL)
+    {
+        free(server->name);
     }
 }
 

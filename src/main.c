@@ -148,7 +148,7 @@ static bool init(struct arguments *arguments)
         goto exit_2;
     }
 
-    jojodns.relay_servers = relay_servers_init(jojodns.base, config_data);
+    jojodns.relay_servers = relay_servers_init(jojodns.base, config_data, jojodns.relay_forwarders);
     if (jojodns.relay_servers == NULL)
     {
         log_error("Failed to init relay servers");
