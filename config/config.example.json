@@ -3,6 +3,7 @@
         "Enable": true,
         "Config": [
             {
+                "Enable": true,
                 "Alias": "lan-relay",
                 "Forwarders": "google",
                 "Interface": "br-lan",
@@ -17,8 +18,7 @@
             {
                 "Enable": true,
                 "Alias": "google",
-                "DNSServer": "8.8.8.8",
-                "Type": "Static"
+                "DNSServer": "8.8.8.8"
             }
         ]
     }

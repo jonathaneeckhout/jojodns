@@ -344,6 +344,19 @@ exit_0:
     return NULL;
 }
 
+void server_cleanup_content(server_t *server)
+{
+    if (server->cache != NULL)
+    {
+        cache_cleanup(&server->cache);
+    }
+
+    if (server->dns_server != NULL)
+    {
+        evdns_close_server_port(server->dns_server);
+    }
+}
+
 void server_cleanup(server_t **server)
 {
     if (server == NULL || *server == NULL)
@@ -351,15 +364,7 @@ void server_cleanup(server_t **server)
         return;
     }
 
-    if ((*server)->cache != NULL)
-    {
-        cache_cleanup(&(*server)->cache);
-    }
-
-    if ((*server)->dns_server != NULL)
-    {
-        evdns_close_server_port((*server)->dns_server);
-    }
+    server_cleanup_content(*server);
 
     free(*server);
     *server = NULL;

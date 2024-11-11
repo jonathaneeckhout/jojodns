@@ -5,7 +5,7 @@ project(JojoDNS C)
 set(CMAKE_C_STANDARD 99)
 
 # Set the compiler flags
-set(CMAKE_C_FLAGS "-Wall -Wextra -Werror -pedantic -std=c99")
+set(CMAKE_C_FLAGS "-g -Wall -Wextra -Werror -pedantic -std=c99")
 
 # Find libevent package using PkgConfig
 find_package(PkgConfig REQUIRED)
@@ -29,12 +29,14 @@ add_executable(jojodns
     src/logging.c
     src/client.c
     src/server.c
-    src/cache.c)
+    src/cache.c
+    src/relay_forwarders.c
+    src/relay_servers.c)
 
 # Link the executable with libevent
 target_link_libraries(jojodns ${LIBEVENT_LIBRARIES} hashmapc parson)
 
 
-INSTALL(TARGETS jojodns
-	RUNTIME DESTINATION bin
+install(TARGETS jojodns
+    RUNTIME DESTINATION bin
 )

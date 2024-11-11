@@ -85,21 +85,23 @@ void cache_entry_cleanup(cache_entry_t **entry)
         return;
     }
 
-    free((*entry)->name);
-    free((*entry)->a_addr_list);
-    free((*entry)->aaaa_addr_list);
+    cache_entry_cleanup_content(*entry);
 
     free(*entry);
     *entry = NULL;
 }
 
-static void cache_free(void *item)
+void cache_entry_cleanup_content(cache_entry_t *entry)
 {
-    cache_entry_t *entry = item;
-
     free(entry->name);
     free(entry->a_addr_list);
     free(entry->aaaa_addr_list);
+}
+
+static void cache_free(void *item)
+{
+    cache_entry_t *entry = item;
+    cache_entry_cleanup_content(entry);
 }
 
 static time_t cache_get_earliest_expiration_time(cache_t *cache)
