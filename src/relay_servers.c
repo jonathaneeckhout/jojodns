@@ -47,6 +47,9 @@ static void add_config_server(struct event_base *base, JSON_Object *server_obj, 
     const char *interface = json_object_get_string(server_obj, "Interface");
     const char *address = json_object_get_string(server_obj, "Address");
     int port = json_object_get_number(server_obj, "Port");
+    size_t cache_size = json_object_get_number(server_obj, "CacheSize");
+    int cache_min_ttl = json_object_get_number(server_obj, "CacheMinTTL");
+    int cache_max_ttl = json_object_get_number(server_obj, "CacheMaxTTL");
 
     if (forwarder_name == NULL || strlen(forwarder_name) == 0)
     {
@@ -66,6 +69,21 @@ static void add_config_server(struct event_base *base, JSON_Object *server_obj, 
     {
         log_error("Failed to init server=[%s]", name);
         return;
+    }
+
+    if (cache_size > 0)
+    {
+        server->cache->size = cache_size;
+    }
+
+    if (cache_min_ttl > 0)
+    {
+        server->cache->min_ttl = cache_min_ttl;
+    }
+
+    if (cache_max_ttl > 0)
+    {
+        server->cache->max_ttl = cache_max_ttl;
     }
 
     if (hashmap_set(relay_servers, &(relay_server_t){.name = strdup(name), .server = server}) != NULL)
