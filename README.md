@@ -45,9 +45,16 @@ make test
 ```
 
 ## How to run coverage report
+Generate the coverage report.
 ``` bash
 cd build
 make
 make test
 make coverage
+```
+
+Show coverage report in a html page. Make sure you did the previous step and you're in the build directory.
+``` bash
+genhtml coverage.info --output-directory coverage_report
+firefox coverage_report/index.html
 ```
