@@ -6,26 +6,13 @@
 #include "logging.h"
 #include "client.h"
 
-client_t *client_init(struct event_base *base, const char *name, const char *nameserver)
+client_t *client_init(struct event_base *base, const char *nameserver)
 {
     client_t *client = (client_t *)malloc(sizeof(client_t));
     if (client == NULL)
     {
         log_error("Failed to allocate memory for client_t");
         goto exit_0;
-    }
-
-    if (name == NULL || strlen(name) == 0)
-    {
-        log_error("Client's name is NULL or empty. This is not allowed");
-        goto exit_1;
-    }
-
-    client->name = strdup(name);
-    if (!client->name)
-    {
-        log_error("Failed to allocate memory for name");
-        goto exit_1;
     }
 
     if (nameserver != NULL && strlen(nameserver) > 0)
@@ -41,7 +28,7 @@ client_t *client_init(struct event_base *base, const char *name, const char *nam
     if (client->dns_base == NULL)
     {
         log_error("Failed to init client base");
-        goto exit_2;
+        goto exit_1;
     }
 
     if (nameserver != NULL && strlen(nameserver) > 0)
@@ -49,35 +36,18 @@ client_t *client_init(struct event_base *base, const char *name, const char *nam
         if (evdns_base_nameserver_ip_add(client->dns_base, nameserver) != 0)
         {
             log_error("Failed to add nameserver=[%s]", nameserver);
-            goto exit_3;
+            goto exit_2;
         }
     }
 
-    log_info("Added client=[%s]", name);
-
     return client;
 
-exit_3:
-    evdns_base_free(client->dns_base, 0);
 exit_2:
-    free(client->name);
+    evdns_base_free(client->dns_base, 0);
 exit_1:
     free(client);
 exit_0:
     return NULL;
-}
-
-void client_cleanup_content(client_t *client)
-{
-    if (client->dns_base != NULL)
-    {
-        evdns_base_free(client->dns_base, 0);
-    }
-
-    if (client->name != NULL)
-    {
-        free(client->name);
-    }
 }
 
 void client_cleanup(client_t **client)
@@ -87,7 +57,10 @@ void client_cleanup(client_t **client)
         return;
     }
 
-    client_cleanup_content(*client);
+    if ((*client)->dns_base != NULL)
+    {
+        evdns_base_free((*client)->dns_base, 0);
+    }
 
     free(*client);
     *client = NULL;
