@@ -14,7 +14,7 @@ sudo apt install libevent2-dev
 ```
 If you want to run/extend the tests please also install the following dependencies
 ``` bash
-sudo apt install libcmocka-dev
+sudo apt install libcmocka-dev lcov
 ```
 
 ## How to build
@@ -33,5 +33,21 @@ You can check the help option for al options
 ```
 and example configuration
 ``` bash
-./jojodns -a 127.0.0.1 -p 53 -l debug
+./jojodns -c config/config.example.json -l debug
+```
+
+
+## How to run tests
+``` bash
+cd build
+make
+make test
+```
+
+## How to run coverage report
+``` bash
+cd build
+make
+make test
+make coverage
 ```
