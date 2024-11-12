@@ -11,32 +11,18 @@ set(CMAKE_C_FLAGS "-g -Wall -Wextra -Werror -pedantic -std=c99")
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBEVENT REQUIRED libevent)
 
-# Include directories for libevent
+# Include directories for libevent and headers
 include_directories(${LIBEVENT_INCLUDE_DIRS} "include")
 
+# Add subdirectories
+add_subdirectory(lib)
+add_subdirectory(src)
+add_subdirectory(test)
 
-add_library(hashmapc STATIC lib/hashmapc/hashmap.c)
-
-target_include_directories(hashmapc PUBLIC lib/hashmapc)
-
-add_library(parson STATIC lib/parson/parson.c)
-
-target_include_directories(parson PUBLIC lib/parson)
-
-# Define the executable and list the source files
-add_executable(jojodns
-    src/main.c
-    src/logging.c
-    src/client.c
-    src/server.c
-    src/cache.c
-    src/relay_forwarders.c
-    src/relay_servers.c)
-
-# Link the executable with libevent
-target_link_libraries(jojodns ${LIBEVENT_LIBRARIES} hashmapc parson)
-
-
+# Install the executable
 install(TARGETS jojodns
     RUNTIME DESTINATION bin
 )
+
+# Enable testing
+enable_testing()

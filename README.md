@@ -12,6 +12,10 @@ Please install the following packages
 ``` bash
 sudo apt install libevent2-dev
 ```
+If you want to run/extend the tests please also install the following dependencies
+``` bash
+sudo apt install libcmocka-dev
+```
 
 ## How to build
 
