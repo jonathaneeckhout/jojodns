@@ -15,6 +15,10 @@
 #include "relay_forwarders.h"
 #include "relay_servers.h"
 
+#ifdef MOD_UBUS
+#include "mods/modubus/modubus.h"
+#endif
+
 #define NAME "JojoDNS"
 
 #define DEFAULT_LOG_LEVEL LOG_INFO
@@ -194,6 +198,10 @@ void handle_sigint(UNUSED int sig)
 int main(int argc, char *argv[])
 {
     logging_init(NAME, DEFAULT_LOG_LEVEL);
+
+#ifdef MOD_UBUS
+    mod_ubus_hello_world();
+#endif
 
     signal(SIGINT, handle_sigint);
 

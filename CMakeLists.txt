@@ -14,6 +14,9 @@ pkg_check_modules(LIBEVENT REQUIRED libevent)
 # Include directories for libevent and headers
 include_directories(${LIBEVENT_INCLUDE_DIRS} "include")
 
+# Configure modules
+option(ENABLE_MOD_UBUS "Enable ubus backend module" ON)
+
 # Add subdirectories
 add_subdirectory(lib)
 add_subdirectory(src)
