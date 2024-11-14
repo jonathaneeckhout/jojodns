@@ -13,20 +13,22 @@
 static uint64_t relay_servers_hash(const void *item, uint64_t seed0, uint64_t seed1)
 {
     const relay_server_t *enrty = item;
-    return hashmap_sip(enrty->name, strlen(enrty->name), seed0, seed1);
+    return hashmap_sip(enrty->alias, strlen(enrty->alias), seed0, seed1);
 }
 
 static int relay_servers_compare(const void *a, const void *b, UNUSED void *udata)
 {
     const relay_server_t *entry_a = a;
     const relay_server_t *entry_b = b;
-    return strcmp(entry_a->name, entry_b->name);
+    return strcmp(entry_a->alias, entry_b->alias);
 }
 
 static void relay_servers_free(void *item)
 {
     relay_server_t *server = item;
-    free(server->name);
+    free(server->alias);
+    free(server->interface);
+    free(server->address);
     server_cleanup(&server->server);
 }
 
@@ -35,7 +37,7 @@ static void add_config_server(relay_servers_t *relay_servers, JSON_Object *serve
     const relay_forwarder_t *forwarder = NULL;
     server_t *server = NULL;
 
-    const char *name = json_object_get_string(server_obj, "Alias");
+    const char *alias = json_object_get_string(server_obj, "Alias");
     // Currently only support 1 client per server
     const char *forwarder_name = json_object_get_string(server_obj, "Forwarders");
     const char *interface = json_object_get_string(server_obj, "Interface");
@@ -61,7 +63,7 @@ static void add_config_server(relay_servers_t *relay_servers, JSON_Object *serve
     server = server_init(relay_servers->base, forwarder->client, interface, address, port);
     if (server == NULL)
     {
-        log_error("Failed to init server=[%s]", name);
+        log_error("Failed to init server=[%s]", alias);
         return;
     }
 
@@ -80,9 +82,9 @@ static void add_config_server(relay_servers_t *relay_servers, JSON_Object *serve
         server->cache->max_ttl = cache_max_ttl;
     }
 
-    if (hashmap_set(relay_servers->servers, &(relay_server_t){.name = strdup(name), .server = server}) != NULL)
+    if (hashmap_set(relay_servers->servers, &(relay_server_t){.alias = strdup(alias), .server = server}) != NULL)
     {
-        log_error("failed to add server=[%s]", name);
+        log_error("failed to add server=[%s]", alias);
         server_cleanup(&server);
     }
 }

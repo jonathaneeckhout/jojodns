@@ -82,7 +82,7 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
         void *server_entry = blobmsg_open_table(&b, NULL);
 
         blobmsg_add_u32(&b, "Enable", 1);
-        blobmsg_add_string(&b, "Alias", entry->name);
+        blobmsg_add_string(&b, "Alias", entry->alias);
 
         // TODO: store and fill in these values
         void *forwarders_array = blobmsg_open_array(&b, "Forwarders");
@@ -185,7 +185,43 @@ static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_obje
 
 static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_object *obj, UNUSED struct ubus_request_data *req, UNUSED const char *method, UNUSED struct blob_attr *msg)
 {
+    struct blob_buf b;
+    struct blob_attr *tb[__ADD_RELAY_SERVER_MAX];
+
+    // const char *alias = "";
+    // const char *interface = "";
+    // const char *address = "";
+    // int port = 0;
+    // int cache_size = 0;
+    // int cache_min_ttl = 0;
+    // int cache_max_ttl = 0;
+
+    memset(&b, 0, sizeof(b));
+    blob_buf_init(&b, 0);
+
+    if (blobmsg_parse(add_relay_server_policy, ARRAY_SIZE(add_relay_server_policy), tb, blob_data(msg), blob_len(msg)) != 0)
+    {
+        blobmsg_add_string(&b, "Error", "Invalid arguments");
+        goto exit_0;
+    }
+
+    blobmsg_add_string(&b, "Response", "ok");
+
+    ubus_send_reply(ctx, req, b.head);
+
+    blob_buf_free(&b);
+
     return 0;
+
+exit_0:
+
+    blobmsg_add_string(&b, "Response", "failed");
+
+    ubus_send_reply(ctx, req, b.head);
+
+    blob_buf_free(&b);
+
+    return -1;
 }
 
 static struct ubus_method jojodns_methods[] = {

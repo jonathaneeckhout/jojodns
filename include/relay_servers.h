@@ -10,7 +10,14 @@
 
 typedef struct _relay_server_t
 {
-    char *name;
+    bool enable;
+    char *alias;
+    char *interface;
+    char *address;
+    int port;
+    size_t cache_size;
+    int cache_min_ttl;
+    int cache_max_ttl;
     server_t *server;
 } relay_server_t;
 
