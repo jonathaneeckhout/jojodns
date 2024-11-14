@@ -30,7 +30,7 @@
 typedef struct _jojodns_t
 {
     struct event_base *base;
-    struct hashmap *relay_forwarders;
+    relay_forwarders_t *relay_forwarders;
     struct hashmap *relay_servers;
     struct sockaddr_in server_sin;
 #ifdef MOD_UBUS
@@ -143,7 +143,7 @@ static bool init(struct arguments *arguments)
         goto exit_2;
     }
 
-    jojodns.relay_servers = relay_servers_init(jojodns.base, config_data, jojodns.relay_forwarders);
+    jojodns.relay_servers = relay_servers_init(jojodns.base, config_data, jojodns.relay_forwarders->forwarders);
     if (jojodns.relay_servers == NULL)
     {
         log_error("Failed to init relay servers");
@@ -161,9 +161,9 @@ static bool init(struct arguments *arguments)
     return true;
 
 exit_4:
-    relay_servers_cleanup(jojodns.relay_forwarders);
+    relay_servers_cleanup(jojodns.relay_servers);
 exit_3:
-    relay_forwarders_cleanup(jojodns.relay_forwarders);
+    relay_forwarders_cleanup(&jojodns.relay_forwarders);
 exit_2:
     json_value_free(config_data);
 exit_1:
@@ -182,7 +182,7 @@ static void cleanup()
     cleanup_modules();
 
     relay_servers_cleanup(jojodns.relay_servers);
-    relay_forwarders_cleanup(jojodns.relay_forwarders);
+    relay_forwarders_cleanup(&jojodns.relay_forwarders);
 
     event_base_free(jojodns.base);
 }
