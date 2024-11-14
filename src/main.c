@@ -23,10 +23,6 @@
 
 #define DEFAULT_LOG_LEVEL LOG_INFO
 
-#define DEFAULT_SERVER_INTERFACE ""
-#define DEFAULT_SERVER_ADDRESS "127.0.0.1"
-#define DEFAULT_SERVER_PORT 9876
-#define DEFAULT_CLIENT_NAMESERVER ""
 #define DEFAULT_CONFIG_FILE ""
 
 #define UNUSED __attribute__((unused))
@@ -59,10 +55,6 @@ static char doc[] = "A event driven dns relay server. With full runtime configur
 static char args_doc[] = "";
 
 static struct argp_option options[] = {
-    {"address", 'a', "ADDRESS", 0, "IP address to bind to", 0},
-    {"interface", 'i', "INTERFACE", 0, "Network interface to bind to. If set address argument is ingored", 0},
-    {"port", 'p', "PORT", 0, "Port number to bind to", 0},
-    {"nameserver", 'n', "NAMESERVER", 0, "Which forward nameserver to use. If not set, values from /etc/resolv.conf will be used", 0},
     {"config", 'c', "CONFIG_FILE", 0, "Path to the configuration file", 0},
     {"log-level", 'l', "LEVEL", 0, "Syslog log level (e.g., debug, info, warning, error)", 0},
     {0}};
@@ -73,17 +65,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 
     switch (key)
     {
-    case 'a':
-        arguments->address = arg;
-        break;
-    case 'i':
-        arguments->interface = arg;
-        break;
-    case 'p':
-        arguments->port = atoi(arg);
-        break;
-    case 'n':
-        arguments->nameserver = arg;
         break;
     case 'c':
         arguments->config_file = arg;
@@ -112,12 +93,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         }
         break;
     }
-    case ARGP_KEY_END:
-        if (arguments->port <= 0)
-        {
-            argp_error(state, "Port must be a positive integer.");
-        }
-        break;
     default:
         return ARGP_ERR_UNKNOWN;
     }
@@ -234,10 +209,6 @@ int main(int argc, char *argv[])
 
     struct arguments arguments;
 
-    arguments.interface = DEFAULT_SERVER_INTERFACE;
-    arguments.address = DEFAULT_SERVER_ADDRESS;
-    arguments.port = DEFAULT_SERVER_PORT;
-    arguments.nameserver = DEFAULT_CLIENT_NAMESERVER;
     arguments.config_file = DEFAULT_CONFIG_FILE;
 
     if (argp_parse(&argp, argc, argv, ARGP_NO_EXIT, 0, &arguments) != 0)
