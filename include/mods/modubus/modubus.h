@@ -4,14 +4,9 @@
 #include <libubus.h>
 #include <event2/event.h>
 
-typedef struct _mod_ubus_t
-{
-    struct ubus_context *ctx;
-    struct event *ubus_event;
+#include "relay_forwarders.h"
 
-} mod_ubus_t;
-
-mod_ubus_t *mod_ubus_init(struct event_base *base);
-void mod_ubus_cleanup(mod_ubus_t **mod_ubus);
+bool mod_ubus_init(struct event_base *base, relay_forwarders_t *relay_forwarders);
+void mod_ubus_cleanup();
 
 #endif

@@ -33,9 +33,6 @@ typedef struct _jojodns_t
     relay_forwarders_t *relay_forwarders;
     struct hashmap *relay_servers;
     struct sockaddr_in server_sin;
-#ifdef MOD_UBUS
-    mod_ubus_t *mod_ubus;
-#endif
 } jojodns_t;
 
 static jojodns_t jojodns;
@@ -104,8 +101,7 @@ static struct argp argp = {options, parse_opt, args_doc, doc, NULL, NULL, NULL};
 static bool init_modules()
 {
 #ifdef MOD_UBUS
-    jojodns.mod_ubus = mod_ubus_init(jojodns.base);
-    if (jojodns.mod_ubus == NULL)
+    if (!mod_ubus_init(jojodns.base, jojodns.relay_forwarders))
     {
         log_error("Failed init modubus");
         return false;
@@ -174,7 +170,7 @@ exit_0:
 
 static void cleanup_modules()
 {
-    mod_ubus_cleanup(&jojodns.mod_ubus);
+    mod_ubus_cleanup();
 }
 
 static void cleanup()

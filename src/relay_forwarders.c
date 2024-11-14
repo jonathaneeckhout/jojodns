@@ -31,7 +31,21 @@ static void relay_forwarders_free(void *item)
 
 bool relay_forwarders_add(relay_forwarders_t *relay_forwarders, const char *alias, JSON_Array *nameservers)
 {
-    client_t *client = client_init(relay_forwarders->base, nameservers);
+    client_t *client = NULL;
+
+    if (alias == NULL || strlen(alias) == 0)
+    {
+        log_warning("Failed to add forwarder, invalid alias");
+        goto exit_0;
+    }
+
+    if (hashmap_get(relay_forwarders->forwarders, &(relay_forwarder_t){.name = (char *)alias}) != NULL)
+    {
+        log_warning("Relay forwarder=[%s] already exists", alias);
+        goto exit_0;
+    }
+
+    client = client_init(relay_forwarders->base, nameservers);
     if (client == NULL)
     {
         log_error("Failed to init forwarder=[%s]", alias);
