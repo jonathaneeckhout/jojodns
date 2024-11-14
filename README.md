@@ -8,10 +8,41 @@ The key concepts of JojoDNS are:
 * As much information retrieved from the internal state as possible
 
 ## Dependencies
+
+### Default dependencies
 Please install the following packages
 ``` bash
 sudo apt install libevent2-dev
 ```
+
+### Ubus module
+The ubus module requires libubus and libubox.
+
+Install libubus
+``` bash
+git clone https://git.openwrt.org/project/ubus.git
+cd ubus
+mkdir build
+cd build
+cmake ..
+make
+sudo make install
+echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/libubus.conf
+```
+
+Install libubox
+``` bash
+git clone https://git.openwrt.org/project/libubox.git
+cd libubox
+mkdir build
+cd build
+cmake ..
+make
+sudo make install
+echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/libubox.conf
+```
+
+### Test dependencies
 If you want to run/extend the tests please also install the following dependencies
 ``` bash
 sudo apt install libcmocka-dev lcov
