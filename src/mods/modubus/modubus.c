@@ -35,6 +35,30 @@ static const struct blobmsg_policy add_relay_forwarder_policy[] = {
     [ADD_RELAY_FORWARDER_DNSSERVERS] = {.name = "DNSServers", .type = BLOBMSG_TYPE_ARRAY},
 };
 
+enum
+{
+    ADD_RELAY_SERVER_ALIAS,
+    ADD_RELAY_SERVER_FORWARDERS,
+    ADD_RELAY_SERVER_INTERFACE,
+    ADD_RELAY_SERVER_ADDRESS,
+    ADD_RELAY_SERVER_PORT,
+    ADD_RELAY_SERVER_CACHE_SIZE,
+    ADD_RELAY_SERVER_CACHE_MIN_TTL,
+    ADD_RELAY_SERVER_CACHE_MAX_TTL,
+    __ADD_RELAY_SERVER_MAX
+};
+
+static const struct blobmsg_policy add_relay_server_policy[] = {
+    [ADD_RELAY_SERVER_ALIAS] = {.name = "Alias", .type = BLOBMSG_TYPE_STRING},
+    [ADD_RELAY_SERVER_FORWARDERS] = {.name = "Forwarders", .type = BLOBMSG_TYPE_ARRAY},
+    [ADD_RELAY_SERVER_INTERFACE] = {.name = "Interface", .type = BLOBMSG_TYPE_STRING},
+    [ADD_RELAY_SERVER_ADDRESS] = {.name = "Address", .type = BLOBMSG_TYPE_STRING},
+    [ADD_RELAY_SERVER_PORT] = {.name = "Port", .type = BLOBMSG_TYPE_INT32},
+    [ADD_RELAY_SERVER_CACHE_SIZE] = {.name = "CacheSize", .type = BLOBMSG_TYPE_INT32},
+    [ADD_RELAY_SERVER_CACHE_MIN_TTL] = {.name = "CacheMinTTL", .type = BLOBMSG_TYPE_INT32},
+    [ADD_RELAY_SERVER_CACHE_MAX_TTL] = {.name = "CacheMaxTTL", .type = BLOBMSG_TYPE_INT32},
+};
+
 static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, UNUSED struct ubus_request_data *req, UNUSED const char *method, UNUSED struct blob_attr *msg)
 {
     struct blob_buf b;
@@ -59,6 +83,18 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
 
         blobmsg_add_u32(&b, "Enable", 1);
         blobmsg_add_string(&b, "Alias", entry->name);
+
+        // TODO: store and fill in these values
+        void *forwarders_array = blobmsg_open_array(&b, "Forwarders");
+        blobmsg_close_array(&b, forwarders_array);
+
+        blobmsg_add_string(&b, "Interface", "");
+        blobmsg_add_string(&b, "Address", "");
+        blobmsg_add_u32(&b, "Port", 0);
+
+        blobmsg_add_u32(&b, "CacheSize", entry->server->cache->size);
+        blobmsg_add_u32(&b, "CacheMinTTL", entry->server->cache->min_ttl);
+        blobmsg_add_u32(&b, "CacheMaxTTL", entry->server->cache->max_ttl);
 
         blobmsg_close_table(&b, server_entry);
     }
@@ -98,7 +134,7 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     return 0;
 }
 
-static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_object *obj, UNUSED struct ubus_request_data *req, UNUSED const char *method, struct blob_attr *msg)
+static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_object *obj, struct ubus_request_data *req, UNUSED const char *method, struct blob_attr *msg)
 {
     struct blob_buf b;
     struct blob_attr *tb[__ADD_RELAY_FORWARDER_MAX];
@@ -147,9 +183,15 @@ static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_obje
     return 0;
 }
 
+static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_object *obj, UNUSED struct ubus_request_data *req, UNUSED const char *method, UNUSED struct blob_attr *msg)
+{
+    return 0;
+}
+
 static struct ubus_method jojodns_methods[] = {
     UBUS_METHOD_NOARG("GetConfig", get_config),
     UBUS_METHOD("AddRelayForwarder", add_relay_forwarder, add_relay_forwarder_policy),
+    UBUS_METHOD("AddRelayServer", add_relay_server, add_relay_server_policy),
 };
 
 static struct ubus_object_type jojodns_object_type =

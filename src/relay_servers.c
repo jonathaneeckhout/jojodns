@@ -25,7 +25,6 @@ static int relay_servers_compare(const void *a, const void *b, UNUSED void *udat
 
 static void relay_servers_free(void *item)
 {
-
     relay_server_t *server = item;
     free(server->name);
     server_cleanup(&server->server);
