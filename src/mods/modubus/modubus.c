@@ -18,6 +18,7 @@ typedef struct _mod_ubus_t
     struct ubus_context *ctx;
     struct event *ubus_event;
     relay_forwarders_t *relay_forwarders;
+    relay_servers_t *relay_servers;
 } mod_ubus_t;
 
 static mod_ubus_t *mod_ubus;
@@ -50,9 +51,24 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
 
     config_array = blobmsg_open_array(&b, "Config");
 
+    while (hashmap_iter(mod_ubus->relay_servers->servers, &iter, &item))
+    {
+        relay_server_t *entry = item;
+
+        void *server_entry = blobmsg_open_table(&b, NULL);
+
+        blobmsg_add_u32(&b, "Enable", 1);
+        blobmsg_add_string(&b, "Alias", entry->name);
+
+        blobmsg_close_table(&b, server_entry);
+    }
+
     blobmsg_close_array(&b, config_array);
 
     forwarding_array = blobmsg_open_array(&b, "Forwarding");
+
+    iter = 0;
+    item = NULL;
 
     while (hashmap_iter(mod_ubus->relay_forwarders->forwarders, &iter, &item))
     {
@@ -156,9 +172,9 @@ static void ubus_event_handler(UNUSED evutil_socket_t fd, short events, void *ar
     }
 }
 
-bool mod_ubus_init(struct event_base *base, relay_forwarders_t *relay_forwarders)
+bool mod_ubus_init(struct event_base *base, relay_forwarders_t *relay_forwarders, relay_servers_t *relay_servers)
 {
-    if (base == NULL || relay_forwarders == NULL)
+    if (base == NULL || relay_forwarders == NULL || relay_servers == NULL)
     {
         log_error("Invalid input arguments");
         goto exit_0;
@@ -172,6 +188,7 @@ bool mod_ubus_init(struct event_base *base, relay_forwarders_t *relay_forwarders
     }
 
     mod_ubus->relay_forwarders = relay_forwarders;
+    mod_ubus->relay_servers = relay_servers;
 
     mod_ubus->ctx = ubus_connect(NULL);
     if (!mod_ubus->ctx)
