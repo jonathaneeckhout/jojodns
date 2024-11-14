@@ -11,7 +11,7 @@
 
 #define UNUSED __attribute__((unused))
 
-static struct blob_buf b;
+// static struct blob_buf b;
 
 typedef struct _mod_ubus_t
 {
@@ -36,9 +36,45 @@ static const struct blobmsg_policy add_relay_forwarder_policy[] = {
 
 static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, UNUSED struct ubus_request_data *req, UNUSED const char *method, UNUSED struct blob_attr *msg)
 {
+    struct blob_buf b;
+    size_t iter = 0;
+    void *item = NULL;
+    void *relay_object = NULL;
+    void *config_array = NULL;
+    void *forwarding_array = NULL;
+
+    memset(&b, 0, sizeof(b));
     blob_buf_init(&b, 0);
 
-    blobmsg_add_string(&b, "response", "Hello from JojoDNS!");
+    relay_object = blobmsg_open_table(&b, "Relay");
+
+    config_array = blobmsg_open_array(&b, "Config");
+
+    blobmsg_close_array(&b, config_array);
+
+    forwarding_array = blobmsg_open_array(&b, "Forwarding");
+
+    while (hashmap_iter(mod_ubus->relay_forwarders->forwarders, &iter, &item))
+    {
+        relay_forwarder_t *entry = item;
+
+        void *forwarding_entry = blobmsg_open_table(&b, NULL);
+
+        blobmsg_add_u32(&b, "Enable", 1);
+        blobmsg_add_string(&b, "Alias", entry->name);
+
+        void *dnsservers_array = blobmsg_open_array(&b, "DNSServers");
+
+        // TODO: fetch nameservers of entry
+
+        blobmsg_close_array(&b, dnsservers_array);
+
+        blobmsg_close_table(&b, forwarding_entry);
+    }
+
+    blobmsg_close_array(&b, forwarding_array);
+
+    blobmsg_close_table(&b, relay_object);
 
     ubus_send_reply(ctx, req, b.head);
 
@@ -48,6 +84,7 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
 
 static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_object *obj, UNUSED struct ubus_request_data *req, UNUSED const char *method, struct blob_attr *msg)
 {
+    struct blob_buf b;
     struct blob_attr *tb[__ADD_RELAY_FORWARDER_MAX];
     struct blob_attr *cur = NULL;
     const char *alias = "";
@@ -74,6 +111,7 @@ static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_obje
         }
     }
 
+    memset(&b, 0, sizeof(b));
     blob_buf_init(&b, 0);
 
     if (relay_forwarders_add(mod_ubus->relay_forwarders, alias, nameservers))
