@@ -18,7 +18,10 @@
             {
                 "Enable": true,
                 "Alias": "google",
-                "DNSServer": "8.8.8.8"
+                "DNSServers": [
+                    "8.8.8.8",
+                    "8.8.4.4"
+                ]
             }
         ]
     }

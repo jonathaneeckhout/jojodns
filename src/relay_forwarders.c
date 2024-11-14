@@ -32,9 +32,9 @@ static void relay_forwarders_free(void *item)
 static void add_config_client(struct event_base *base, JSON_Object *forwarder, struct hashmap *relay_forwarders)
 {
     const char *name = json_object_get_string(forwarder, "Alias");
-    const char *nameserver = json_object_get_string(forwarder, "DNSServer");
+    JSON_Array* nameservers = json_object_get_array(forwarder, "DNSServers");
 
-    client_t *client = client_init(base, nameserver);
+    client_t *client = client_init(base, nameservers);
     if (client == NULL)
     {
         log_error("Failed to init client=[%s]", name);

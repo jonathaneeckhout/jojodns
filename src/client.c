@@ -2,11 +2,12 @@
 #include <stdbool.h>
 #include <string.h>
 #include <event2/dns.h>
+#include <parson.h>
 
 #include "logging.h"
 #include "client.h"
 
-client_t *client_init(struct event_base *base, const char *nameserver)
+client_t *client_init(struct event_base *base, JSON_Array *nameservers)
 {
     client_t *client = (client_t *)malloc(sizeof(client_t));
     if (client == NULL)
@@ -15,7 +16,7 @@ client_t *client_init(struct event_base *base, const char *nameserver)
         goto exit_0;
     }
 
-    if (nameserver != NULL && strlen(nameserver) > 0)
+    if (nameservers != NULL && json_array_get_count(nameservers) > 0)
     {
         client->dns_base = evdns_base_new(base, 0x0);
     }
@@ -31,19 +32,26 @@ client_t *client_init(struct event_base *base, const char *nameserver)
         goto exit_1;
     }
 
-    if (nameserver != NULL && strlen(nameserver) > 0)
+    log_debug("Created a new DNS client");
+
+    if (nameservers != NULL && json_array_get_count(nameservers) > 0)
     {
-        if (evdns_base_nameserver_ip_add(client->dns_base, nameserver) != 0)
+        for (size_t i = 0; i < json_array_get_count(nameservers); i++)
         {
-            log_error("Failed to add nameserver=[%s]", nameserver);
-            goto exit_2;
+            const char *nameserver = json_array_get_string(nameservers, i);
+
+            if (evdns_base_nameserver_ip_add(client->dns_base, nameserver) != 0)
+            {
+                log_warning("Failed to add nameserver=[%s]", nameserver);
+                continue;
+            }
+
+            log_debug("Added nameserver %s", nameserver);
         }
     }
 
     return client;
 
-exit_2:
-    evdns_base_free(client->dns_base, 0);
 exit_1:
     free(client);
 exit_0:
