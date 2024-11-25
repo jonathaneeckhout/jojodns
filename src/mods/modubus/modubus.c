@@ -109,16 +109,24 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
 
     while (hashmap_iter(mod_ubus->relay_forwarders->forwarders, &iter, &item))
     {
+        void *dnsservers_array = NULL;
+        size_t dnsservers_count = 0;
+        JSON_Array *json_dnsservers = NULL;
         relay_forwarder_t *entry = item;
 
         void *forwarding_entry = blobmsg_open_table(&b, NULL);
 
         blobmsg_add_u32(&b, "Enable", 1);
-        blobmsg_add_string(&b, "Alias", entry->name);
+        blobmsg_add_string(&b, "Alias", entry->data->alias);
 
-        void *dnsservers_array = blobmsg_open_array(&b, "DNSServers");
+        dnsservers_array = blobmsg_open_array(&b, "DNSServers");
 
-        // TODO: fetch nameservers of entry
+        json_dnsservers = json_value_get_array(entry->data->nameservers);
+        dnsservers_count = json_array_get_count(json_dnsservers);
+        for (size_t i = 0; i < dnsservers_count; i++)
+        {
+            blobmsg_add_string(&b, NULL, json_array_get_string(json_dnsservers, i));
+        }
 
         blobmsg_close_array(&b, dnsservers_array);
 
@@ -144,6 +152,7 @@ static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_obje
     int rem = 0;
     JSON_Value *dnsservers_root_value = json_value_init_array();
     JSON_Array *nameservers = json_value_get_array(dnsservers_root_value);
+    relay_forwarder_data_t *data = NULL;
 
     blobmsg_parse(add_relay_forwarder_policy, ARRAY_SIZE(add_relay_forwarder_policy), tb, blob_data(msg), blob_len(msg));
 
@@ -164,10 +173,12 @@ static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_obje
         }
     }
 
+    data = relay_forwarder_data_init(alias, nameservers);
+
     memset(&b, 0, sizeof(b));
     blob_buf_init(&b, 0);
 
-    if (relay_forwarders_add(mod_ubus->relay_forwarders, alias, nameservers))
+    if (relay_forwarders_add(mod_ubus->relay_forwarders, data))
     {
         blobmsg_add_string(&b, "Response", "ok");
     }

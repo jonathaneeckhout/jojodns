@@ -35,6 +35,7 @@ bool relay_server_add(relay_servers_t *relay_servers, relay_server_data_t *data)
 
     server_t *server = NULL;
     const relay_forwarder_t *forwarder = NULL;
+    relay_forwarder_data_t relay_data;
 
     if (data->alias == NULL || strlen(data->alias) == 0)
     {
@@ -48,7 +49,10 @@ bool relay_server_add(relay_servers_t *relay_servers, relay_server_data_t *data)
         goto exit_0;
     }
 
-    forwarder = hashmap_get(relay_servers->relay_forwarders->forwarders, &(relay_forwarder_t){.name = data->forwarder_name});
+    memset(&relay_data, 0, sizeof(relay_forwarder_data_t));
+    relay_data.alias = data->forwarder_name;
+
+    forwarder = hashmap_get(relay_servers->relay_forwarders->forwarders, &(relay_forwarder_t){.data = &relay_data});
     if (forwarder == NULL)
     {
         log_warning("Could not find client with name=[%s]", data->forwarder_name);
@@ -188,7 +192,7 @@ relay_server_data_t *relay_server_data_init(bool enable, const char *alias, cons
     relay_server_data_t *relay_server_data = (relay_server_data_t *)calloc(1, sizeof(relay_server_data_t));
     if (relay_server_data == NULL)
     {
-        log_error("Failed to allocate memory for relay_servers_t");
+        log_error("Failed to allocate memory for relay_server_data_t");
         goto exit_0;
     }
 

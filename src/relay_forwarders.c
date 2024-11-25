@@ -12,57 +12,58 @@
 static uint64_t relay_forwarders_hash(const void *item, uint64_t seed0, uint64_t seed1)
 {
     const relay_forwarder_t *enrty = item;
-    return hashmap_sip(enrty->name, strlen(enrty->name), seed0, seed1);
+    return hashmap_sip(enrty->data->alias, strlen(enrty->data->alias), seed0, seed1);
 }
 
 static int relay_forwarders_compare(const void *a, const void *b, UNUSED void *udata)
 {
     const relay_forwarder_t *entry_a = a;
     const relay_forwarder_t *entry_b = b;
-    return strcmp(entry_a->name, entry_b->name);
+    return strcmp(entry_a->data->alias, entry_b->data->alias);
 }
 
 static void relay_forwarders_free(void *item)
 {
     relay_forwarder_t *forwarder = item;
-    free(forwarder->name);
+    relay_forwarder_data_cleanup(&forwarder->data);
     client_cleanup(&forwarder->client);
 }
 
-bool relay_forwarders_add(relay_forwarders_t *relay_forwarders, const char *alias, JSON_Array *nameservers)
+bool relay_forwarders_add(relay_forwarders_t *relay_forwarders, relay_forwarder_data_t *data)
 {
     client_t *client = NULL;
 
-    if (alias == NULL || strlen(alias) == 0)
+    if (data->alias == NULL || strlen(data->alias) == 0)
     {
         log_warning("Failed to add forwarder, invalid alias");
         goto exit_0;
     }
 
-    if (hashmap_get(relay_forwarders->forwarders, &(relay_forwarder_t){.name = (char *)alias}) != NULL)
+    if (hashmap_get(relay_forwarders->forwarders, &(relay_forwarder_t){.data = data}) != NULL)
     {
-        log_warning("Relay forwarder=[%s] already exists", alias);
+        log_warning("Relay forwarder=[%s] already exists", data->alias);
         goto exit_0;
     }
 
-    client = client_init(relay_forwarders->base, nameservers);
+    client = client_init(relay_forwarders->base, json_value_get_array(data->nameservers));
     if (client == NULL)
     {
-        log_error("Failed to init forwarder=[%s]", alias);
+        log_error("Failed to init forwarder=[%s]", data->alias);
         goto exit_0;
     }
 
-    if (hashmap_set(relay_forwarders->forwarders, &(relay_forwarder_t){.name = strdup(alias), .client = client}) != NULL)
+    if (hashmap_set(relay_forwarders->forwarders, &(relay_forwarder_t){.data = data, .client = client}) != NULL)
     {
-        log_error("failed to add client=[%s]", alias);
+        log_error("failed to add client=[%s]", data->alias);
         goto exit_1;
     }
 
-    log_info("Added relay forwarder=[%s]", alias);
+    log_info("Added relay forwarder=[%s]", data->alias);
 
     return true;
 
 exit_1:
+    relay_forwarder_data_cleanup(&data);
     client_cleanup(&client);
 exit_0:
     return false;
@@ -72,8 +73,9 @@ static void add_config_forwarder(relay_forwarders_t *relay_forwarders, JSON_Obje
 {
     const char *alias = json_object_get_string(forwarder, "Alias");
     JSON_Array *nameservers = json_object_get_array(forwarder, "DNSServers");
+    relay_forwarder_data_t *data = relay_forwarder_data_init(alias, nameservers);
 
-    relay_forwarders_add(relay_forwarders, alias, nameservers);
+    relay_forwarders_add(relay_forwarders, data);
 }
 
 relay_forwarders_t *relay_forwarders_init(struct event_base *base, JSON_Value *config_data)
@@ -134,4 +136,40 @@ void relay_forwarders_cleanup(relay_forwarders_t **relay_forwarders)
 
     free(*relay_forwarders);
     relay_forwarders = NULL;
+}
+
+relay_forwarder_data_t *relay_forwarder_data_init(const char *alias, JSON_Array *nameservers)
+{
+    size_t servers_count = 0;
+    JSON_Array *json_nameservers = NULL;
+    relay_forwarder_data_t *relay_forwarder_data = (relay_forwarder_data_t *)calloc(1, sizeof(relay_forwarder_data_t));
+    if (relay_forwarder_data == NULL)
+    {
+        log_error("Failed to allocate memory for relay_forwarder_data_t");
+        goto exit_0;
+    }
+
+    relay_forwarder_data->alias = strdup(alias);
+    relay_forwarder_data->nameservers = json_value_init_array();
+    json_nameservers = json_value_get_array(relay_forwarder_data->nameservers);
+
+    servers_count = json_array_get_count(nameservers);
+    for (size_t i = 0; i < servers_count; i++)
+    {
+        json_array_append_string(json_nameservers, json_array_get_string(nameservers, i));
+    }
+
+    return relay_forwarder_data;
+
+exit_0:
+    return NULL;
+}
+
+void relay_forwarder_data_cleanup(relay_forwarder_data_t **relay_forwarder_data)
+{
+    free((*relay_forwarder_data)->alias);
+    json_value_free((*relay_forwarder_data)->nameservers);
+
+    free(*relay_forwarder_data);
+    relay_forwarder_data = NULL;
 }
