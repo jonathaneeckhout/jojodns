@@ -18,6 +18,12 @@ sudo apt install libevent2-dev
 ### Ubus module
 The ubus module requires libubus and libubox.
 
+Dependencies
+``` bash
+sudo apt-get install liblua5.1-dev libjson-c-dev
+
+```
+
 Install libubus
 ``` bash
 git clone https://git.openwrt.org/project/ubus.git
@@ -28,6 +34,7 @@ cmake ..
 make
 sudo make install
 echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/libubus.conf
+sudo ldconfig
 ```
 
 Install libubox
@@ -40,6 +47,7 @@ cmake ..
 make
 sudo make install
 echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/libubox.conf
+sudo ldconfig
 ```
 
 ### Test dependencies

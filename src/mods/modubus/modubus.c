@@ -77,24 +77,25 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
 
     while (hashmap_iter(mod_ubus->relay_servers->servers, &iter, &item))
     {
+        void *forwarders_array = NULL;
         relay_server_t *entry = item;
 
         void *server_entry = blobmsg_open_table(&b, NULL);
 
-        blobmsg_add_u32(&b, "Enable", 1);
-        blobmsg_add_string(&b, "Alias", entry->alias);
+        blobmsg_add_u32(&b, "Enable", entry->data->enable);
+        blobmsg_add_string(&b, "Alias", entry->data->alias);
 
-        // TODO: store and fill in these values
-        void *forwarders_array = blobmsg_open_array(&b, "Forwarders");
+        forwarders_array = blobmsg_open_array(&b, "Forwarders");
+        blobmsg_add_string(&b, NULL, entry->data->forwarder_name);
         blobmsg_close_array(&b, forwarders_array);
 
-        blobmsg_add_string(&b, "Interface", "");
-        blobmsg_add_string(&b, "Address", "");
-        blobmsg_add_u32(&b, "Port", 0);
+        blobmsg_add_string(&b, "Interface", entry->data->interface);
+        blobmsg_add_string(&b, "Address", entry->data->address);
+        blobmsg_add_u32(&b, "Port", entry->data->port);
 
-        blobmsg_add_u32(&b, "CacheSize", entry->server->cache->size);
-        blobmsg_add_u32(&b, "CacheMinTTL", entry->server->cache->min_ttl);
-        blobmsg_add_u32(&b, "CacheMaxTTL", entry->server->cache->max_ttl);
+        blobmsg_add_u32(&b, "CacheSize", entry->data->cache_size);
+        blobmsg_add_u32(&b, "CacheMinTTL", entry->data->cache_min_ttl);
+        blobmsg_add_u32(&b, "CacheMaxTTL", entry->data->cache_max_ttl);
 
         blobmsg_close_table(&b, server_entry);
     }
