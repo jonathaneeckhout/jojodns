@@ -37,6 +37,7 @@ static const struct blobmsg_policy add_relay_forwarder_policy[] = {
 
 enum
 {
+    ADD_RELAY_SERVER_ENABLE,
     ADD_RELAY_SERVER_ALIAS,
     ADD_RELAY_SERVER_FORWARDERS,
     ADD_RELAY_SERVER_INTERFACE,
@@ -49,6 +50,7 @@ enum
 };
 
 static const struct blobmsg_policy add_relay_server_policy[] = {
+    [ADD_RELAY_SERVER_ENABLE] = {.name = "Enable", .type = BLOBMSG_TYPE_BOOL},
     [ADD_RELAY_SERVER_ALIAS] = {.name = "Alias", .type = BLOBMSG_TYPE_STRING},
     [ADD_RELAY_SERVER_FORWARDERS] = {.name = "Forwarders", .type = BLOBMSG_TYPE_ARRAY},
     [ADD_RELAY_SERVER_INTERFACE] = {.name = "Interface", .type = BLOBMSG_TYPE_STRING},
@@ -64,12 +66,15 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     struct blob_buf b;
     size_t iter = 0;
     void *item = NULL;
+    void *data_object = NULL;
     void *relay_object = NULL;
     void *config_array = NULL;
     void *forwarding_array = NULL;
 
     memset(&b, 0, sizeof(b));
     blob_buf_init(&b, 0);
+
+    data_object = blobmsg_open_table(&b, "Data");
 
     relay_object = blobmsg_open_table(&b, "Relay");
 
@@ -137,6 +142,10 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
 
     blobmsg_close_table(&b, relay_object);
 
+    blobmsg_close_table(&b, data_object);
+
+    blobmsg_add_string(&b, "Status", "Ok");
+
     ubus_send_reply(ctx, req, b.head);
 
     blob_buf_free(&b);
@@ -180,11 +189,11 @@ static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_obje
 
     if (relay_forwarders_add(mod_ubus->relay_forwarders, data))
     {
-        blobmsg_add_string(&b, "Response", "ok");
+        blobmsg_add_string(&b, "Status", "Ok");
     }
     else
     {
-        blobmsg_add_string(&b, "Response", "failed");
+        blobmsg_add_string(&b, "Status", "Failed");
     }
 
     json_value_free(dnsservers_root_value);
@@ -199,14 +208,19 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
 {
     struct blob_buf b;
     struct blob_attr *tb[__ADD_RELAY_SERVER_MAX];
-
-    // const char *alias = "";
-    // const char *interface = "";
-    // const char *address = "";
-    // int port = 0;
-    // int cache_size = 0;
-    // int cache_min_ttl = 0;
-    // int cache_max_ttl = 0;
+    struct blob_attr *cur = NULL;
+    bool enable = 0;
+    const char *alias = "";
+    int rem = 0;
+    JSON_Value *forwarders_root_value = json_value_init_array();
+    JSON_Array *forwarders = json_value_get_array(forwarders_root_value);
+    const char *interface = "";
+    const char *address = "";
+    int port = 0;
+    int cache_size = 0;
+    int cache_min_ttl = 0;
+    int cache_max_ttl = 0;
+    relay_server_data_t *data = NULL;
 
     memset(&b, 0, sizeof(b));
     blob_buf_init(&b, 0);
@@ -217,7 +231,100 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
         goto exit_0;
     }
 
-    blobmsg_add_string(&b, "Response", "ok");
+    if (tb[ADD_RELAY_SERVER_ENABLE])
+    {
+        enable = blobmsg_get_bool(tb[ADD_RELAY_SERVER_ENABLE]);
+    }
+    else
+    {
+        enable = 1;
+    }
+
+    if (tb[ADD_RELAY_SERVER_ALIAS])
+    {
+        alias = blobmsg_get_string(tb[ADD_RELAY_SERVER_ALIAS]);
+    }
+    else
+    {
+        blobmsg_add_string(&b, "Error", "Missing Alias argument");
+        goto exit_0;
+    }
+
+    if (tb[ADD_RELAY_SERVER_FORWARDERS])
+    {
+        blobmsg_for_each_attr(cur, tb[ADD_RELAY_SERVER_FORWARDERS], rem)
+        {
+            if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING)
+            {
+                const char *forwarder = blobmsg_get_string(cur);
+                json_array_append_string(forwarders, forwarder);
+            }
+        }
+    }
+    else
+    {
+        blobmsg_add_string(&b, "Error", "Missing Forwarders argument");
+        goto exit_0;
+    }
+
+    if (tb[ADD_RELAY_SERVER_INTERFACE])
+    {
+        interface = blobmsg_get_string(tb[ADD_RELAY_SERVER_INTERFACE]);
+    }
+    else
+    {
+        blobmsg_add_string(&b, "Error", "Missing Interface argument");
+        goto exit_0;
+    }
+
+    if (tb[ADD_RELAY_SERVER_ADDRESS])
+    {
+        address = blobmsg_get_string(tb[ADD_RELAY_SERVER_ADDRESS]);
+    }
+    else
+    {
+        blobmsg_add_string(&b, "Error", "Missing Address argument");
+        goto exit_0;
+    }
+
+    if (tb[ADD_RELAY_SERVER_PORT])
+    {
+        port = blobmsg_get_u32(tb[ADD_RELAY_SERVER_PORT]);
+    }
+    else
+    {
+        blobmsg_add_string(&b, "Error", "Missing Port argument");
+        goto exit_0;
+    }
+
+    if (tb[ADD_RELAY_SERVER_CACHE_SIZE])
+    {
+        cache_size = blobmsg_get_u32(tb[ADD_RELAY_SERVER_CACHE_SIZE]);
+    }
+
+    if (tb[ADD_RELAY_SERVER_CACHE_MIN_TTL])
+    {
+        cache_min_ttl = blobmsg_get_u32(tb[ADD_RELAY_SERVER_CACHE_MIN_TTL]);
+    }
+
+    if (tb[ADD_RELAY_SERVER_CACHE_MAX_TTL])
+    {
+        cache_max_ttl = blobmsg_get_u32(tb[ADD_RELAY_SERVER_CACHE_MAX_TTL]);
+    }
+
+    // Currently only 1 forwarder per server is supported
+    data = relay_server_data_init(enable, alias, json_array_get_string(forwarders, 0), interface, address, port, cache_size, cache_min_ttl, cache_max_ttl);
+
+    if (!relay_server_add(mod_ubus->relay_servers, data))
+    {
+        goto exit_1;
+    }
+
+    blobmsg_add_string(&b, "Status", "Ok");
+
+    relay_server_data_cleanup(&data);
+
+    json_value_free(forwarders_root_value);
 
     ubus_send_reply(ctx, req, b.head);
 
@@ -225,9 +332,14 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
 
     return 0;
 
+exit_1:
+    relay_server_data_cleanup(&data);
+
 exit_0:
 
-    blobmsg_add_string(&b, "Response", "failed");
+    blobmsg_add_string(&b, "Status", "Failed");
+
+    json_value_free(forwarders_root_value);
 
     ubus_send_reply(ctx, req, b.head);
 
