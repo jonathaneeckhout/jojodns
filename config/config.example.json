@@ -6,12 +6,28 @@
                 "Enable": true,
                 "Alias": "lan-relay",
                 "Forwarders": "google",
+                "Zones": "home",
                 "Interface": "",
                 "Address": "127.0.0.1",
                 "Port": 9876,
                 "CacheSize": 4000,
                 "CacheMinTTL": 0,
                 "CacheMaxTTL": 86400
+            }
+        ],
+        "Zone": [
+            {
+                "Enable": true,
+                "Alias": "home",
+                "Hosts": [
+                    {
+                        "Alias": "yourself",
+                        "Name": "yourself.home",
+                        "IPAddresses": [
+                            "127.0.0.1"
+                        ]
+                    }
+                ]
             }
         ],
         "Forwarding": [

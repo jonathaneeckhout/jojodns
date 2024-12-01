@@ -14,6 +14,7 @@
 #include "server.h"
 #include "relay_forwarders.h"
 #include "relay_servers.h"
+#include "zones.h"
 
 #ifdef MOD_UBUS
 #include "mods/modubus/modubus.h"
@@ -32,7 +33,7 @@ typedef struct _jojodns_t
     struct event_base *base;
     relay_forwarders_t *relay_forwarders;
     relay_servers_t *relay_servers;
-    struct sockaddr_in server_sin;
+    zones_t *zones;
 } jojodns_t;
 
 static jojodns_t jojodns;
@@ -101,7 +102,7 @@ static struct argp argp = {options, parse_opt, args_doc, doc, NULL, NULL, NULL};
 static bool init_modules()
 {
 #ifdef MOD_UBUS
-    if (!mod_ubus_init(jojodns.base, jojodns.relay_forwarders, jojodns.relay_servers))
+    if (!mod_ubus_init(jojodns.base, jojodns.relay_forwarders, jojodns.relay_servers, jojodns.zones))
     {
         log_error("Failed init modubus");
         return false;
@@ -146,16 +147,25 @@ static bool init(struct arguments *arguments)
         goto exit_3;
     }
 
+    jojodns.zones = zones_init(config_data);
+    if (jojodns.zones == NULL)
+    {
+        log_error("Failed to init zones");
+        goto exit_4;
+    }
+
     if (!init_modules())
     {
         log_error("Failed to init modules");
-        goto exit_4;
+        goto exit_5;
     }
 
     json_value_free(config_data);
 
     return true;
 
+exit_5:
+    zones_cleanup(&jojodns.zones);
 exit_4:
     relay_servers_cleanup(&jojodns.relay_servers);
 exit_3:
@@ -179,6 +189,7 @@ static void cleanup()
 
     relay_servers_cleanup(&jojodns.relay_servers);
     relay_forwarders_cleanup(&jojodns.relay_forwarders);
+    zones_cleanup(&jojodns.zones);
 
     event_base_free(jojodns.base);
 }

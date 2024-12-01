@@ -1,0 +1,2 @@
+- Add local host resolving
+- Verify config file input

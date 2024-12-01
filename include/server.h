@@ -4,12 +4,14 @@
 #include <stdbool.h>
 
 #include "client.h"
+#include "local.h"
 #include "cache.h"
 
 typedef struct _server_t
 {
     struct evdns_server_port *dns_server;
     client_t *client;
+    local_t *local;
     cache_t *cache;
 } server_t;
 

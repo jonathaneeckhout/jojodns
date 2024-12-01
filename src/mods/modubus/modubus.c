@@ -19,6 +19,7 @@ typedef struct _mod_ubus_t
     struct event *ubus_event;
     relay_forwarders_t *relay_forwarders;
     relay_servers_t *relay_servers;
+    zones_t *zones;
 } mod_ubus_t;
 
 static mod_ubus_t *mod_ubus;
@@ -69,6 +70,7 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     void *data_object = NULL;
     void *relay_object = NULL;
     void *config_array = NULL;
+    void *zone_array = NULL;
     void *forwarding_array = NULL;
 
     memset(&b, 0, sizeof(b));
@@ -106,6 +108,41 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     }
 
     blobmsg_close_array(&b, config_array);
+
+    zone_array = blobmsg_open_array(&b, "Zone");
+
+    iter = 0;
+    item = NULL;
+
+    while (hashmap_iter(mod_ubus->zones->zones, &iter, &item))
+    {
+        zone_t *entry = item;
+        void *hosts_array = NULL;
+        JSON_Array *json_hosts = NULL;
+
+        void *zone_entry = blobmsg_open_table(&b, NULL);
+
+        blobmsg_add_u32(&b, "Enable", 1);
+        blobmsg_add_string(&b, "Alias", entry->data->alias);
+        hosts_array = blobmsg_open_array(&b, "Hosts");
+
+        json_hosts = json_value_get_array(entry->data->hosts);
+
+        for (size_t i = 0; i < json_array_get_count(json_hosts); i++)
+        {
+            void *host_entry = blobmsg_open_table(&b, NULL);
+            JSON_Object *host_object = json_array_get_object(json_hosts, i);
+            blobmsg_add_string(&b, "Alias", json_object_get_string(host_object, "Alias"));
+            blobmsg_add_string(&b, "Name", json_object_get_string(host_object, "Name"));
+            blobmsg_close_table(&b, host_entry);
+        }
+
+        blobmsg_close_array(&b, hosts_array);
+
+        blobmsg_close_table(&b, zone_entry);
+    }
+
+    blobmsg_close_array(&b, zone_array);
 
     forwarding_array = blobmsg_open_array(&b, "Forwarding");
 
@@ -374,7 +411,7 @@ static void ubus_event_handler(UNUSED evutil_socket_t fd, short events, void *ar
     }
 }
 
-bool mod_ubus_init(struct event_base *base, relay_forwarders_t *relay_forwarders, relay_servers_t *relay_servers)
+bool mod_ubus_init(struct event_base *base, relay_forwarders_t *relay_forwarders, relay_servers_t *relay_servers, zones_t *zones)
 {
     if (base == NULL || relay_forwarders == NULL || relay_servers == NULL)
     {
@@ -391,6 +428,7 @@ bool mod_ubus_init(struct event_base *base, relay_forwarders_t *relay_forwarders
 
     mod_ubus->relay_forwarders = relay_forwarders;
     mod_ubus->relay_servers = relay_servers;
+    mod_ubus->zones = zones;
 
     mod_ubus->ctx = ubus_connect(NULL);
     if (!mod_ubus->ctx)

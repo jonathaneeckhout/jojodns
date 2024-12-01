@@ -6,6 +6,7 @@
 #include <event2/dns.h>
 
 #include "client.h"
+
 typedef struct _relay_forwarder_data_t
 {
     char *alias;
