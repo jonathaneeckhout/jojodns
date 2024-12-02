@@ -77,13 +77,32 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     void *forwarding_array = NULL;
 
     memset(&b, 0, sizeof(b));
-    blob_buf_init(&b, 0);
+    if (blob_buf_init(&b, 0) != 0)
+    {
+        log_error("Failed to initialize blob buffer");
+        goto exit_0;
+    }
 
     data_object = blobmsg_open_table(&b, "Data");
+    if (!data_object)
+    {
+        log_error("Failed to open Data table");
+        goto exit_1;
+    }
 
     relay_object = blobmsg_open_table(&b, "Relay");
+    if (!relay_object)
+    {
+        log_error("Failed to open Relay table");
+        goto exit_1;
+    }
 
     config_array = blobmsg_open_array(&b, "Config");
+    if (!config_array)
+    {
+        log_error("Failed to open Config array");
+        goto exit_1;
+    }
 
     while (hashmap_iter(mod_ubus->relay_servers->servers, &iter, &item))
     {
@@ -92,17 +111,28 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
         relay_server_t *entry = item;
 
         void *server_entry = blobmsg_open_table(&b, NULL);
+        if (!server_entry)
+        {
+            log_error("Failed to open server entry table");
+            goto exit_1;
+        }
 
         blobmsg_add_u32(&b, "Enable", entry->data->enable);
         blobmsg_add_string(&b, "Alias", entry->data->alias);
 
         forwarders_array = blobmsg_open_array(&b, "Forwarders");
-        blobmsg_add_string(&b, NULL, entry->data->forwarder_name);
-        blobmsg_close_array(&b, forwarders_array);
+        if (forwarders_array)
+        {
+            blobmsg_add_string(&b, NULL, entry->data->forwarder_name);
+            blobmsg_close_array(&b, forwarders_array);
+        }
 
         zones_array = blobmsg_open_array(&b, "Zones");
-        blobmsg_add_string(&b, NULL, entry->data->zone_name);
-        blobmsg_close_array(&b, zones_array);
+        if (zones_array)
+        {
+            blobmsg_add_string(&b, NULL, entry->data->zone_name);
+            blobmsg_close_array(&b, zones_array);
+        }
 
         blobmsg_add_string(&b, "Interface", entry->data->interface);
         blobmsg_add_string(&b, "Address", entry->data->address);
@@ -118,6 +148,11 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     blobmsg_close_array(&b, config_array);
 
     zone_array = blobmsg_open_array(&b, "Zone");
+    if (!zone_array)
+    {
+        log_error("Failed to open Zone array");
+        goto exit_1;
+    }
 
     iter = 0;
     item = NULL;
@@ -128,34 +163,47 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
         void *hosts_array = NULL;
 
         void *zone_entry = blobmsg_open_table(&b, NULL);
+        if (!zone_entry)
+        {
+            log_error("Failed to open zone entry table");
+            goto exit_1;
+        }
 
         blobmsg_add_u32(&b, "Enable", 1);
         blobmsg_add_string(&b, "Alias", entry->data->alias);
         hosts_array = blobmsg_open_array(&b, "Hosts");
 
-        for (size_t i = 0; i < entry->data->hosts_count; i++)
+        if (hosts_array)
         {
-            void *host_ip_address_array = NULL;
-
-            void *host_entry = blobmsg_open_table(&b, NULL);
-            // blobmsg_add_string(&b, "Alias", json_object_get_string(host_object, "Alias"));
-            blobmsg_add_string(&b, "Name", entry->data->hosts[i]->name);
-
-            host_ip_address_array = blobmsg_open_array(&b, "IPAddresses");
-
-            for (size_t j = 0; j < entry->data->hosts[i]->count; j++)
+            for (size_t i = 0; i < entry->data->hosts_count; i++)
             {
-                char buf[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &entry->data->hosts[i]->a_addr_list[j], buf, sizeof(buf));
-                blobmsg_add_string(&b, NULL, buf);
+                void *host_ip_address_array = NULL;
+
+                void *host_entry = blobmsg_open_table(&b, NULL);
+                if (!host_entry)
+                {
+                    log_error("Failed to open host entry table");
+                    goto exit_1;
+                }
+                blobmsg_add_string(&b, "Name", entry->data->hosts[i]->name);
+
+                host_ip_address_array = blobmsg_open_array(&b, "IPAddresses");
+
+                if (host_ip_address_array)
+                {
+                    for (size_t j = 0; j < entry->data->hosts[i]->count; j++)
+                    {
+                        char buf[INET_ADDRSTRLEN];
+                        inet_ntop(AF_INET, &entry->data->hosts[i]->a_addr_list[j], buf, sizeof(buf));
+                        blobmsg_add_string(&b, NULL, buf);
+                    }
+                    blobmsg_close_array(&b, host_ip_address_array);
+                }
+
+                blobmsg_close_table(&b, host_entry);
             }
-
-            blobmsg_close_array(&b, host_ip_address_array);
-
-            blobmsg_close_table(&b, host_entry);
+            blobmsg_close_array(&b, hosts_array);
         }
-
-        blobmsg_close_array(&b, hosts_array);
 
         blobmsg_close_table(&b, zone_entry);
     }
@@ -163,6 +211,11 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     blobmsg_close_array(&b, zone_array);
 
     forwarding_array = blobmsg_open_array(&b, "Forwarding");
+    if (!forwarding_array)
+    {
+        log_error("Failed to open Forwarding array");
+        goto exit_1;
+    }
 
     iter = 0;
     item = NULL;
@@ -173,18 +226,24 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
         relay_forwarder_t *entry = item;
 
         void *forwarding_entry = blobmsg_open_table(&b, NULL);
+        if (!forwarding_entry)
+        {
+            log_error("Failed to open forwarding entry table");
+            goto exit_1;
+        }
 
         blobmsg_add_u32(&b, "Enable", 1);
         blobmsg_add_string(&b, "Alias", entry->data->alias);
 
         dnsservers_array = blobmsg_open_array(&b, "DNSServers");
-
-        for (size_t i = 0; i < entry->data->nameserver_count; i++)
+        if (dnsservers_array)
         {
-            blobmsg_add_string(&b, NULL, entry->data->nameservers[i]);
+            for (size_t i = 0; i < entry->data->nameserver_count; i++)
+            {
+                blobmsg_add_string(&b, NULL, entry->data->nameservers[i]);
+            }
+            blobmsg_close_array(&b, dnsservers_array);
         }
-
-        blobmsg_close_array(&b, dnsservers_array);
 
         blobmsg_close_table(&b, forwarding_entry);
     }
@@ -197,10 +256,19 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
 
     blobmsg_add_string(&b, "Status", "Ok");
 
-    ubus_send_reply(ctx, req, b.head);
+    if (ubus_send_reply(ctx, req, b.head) != 0)
+    {
+        log_error("Failed to send ubus reply");
+        goto exit_1;
+    }
 
     blob_buf_free(&b);
-    return 0;
+    return UBUS_STATUS_OK;
+
+exit_1:
+    blob_buf_free(&b);
+exit_0:
+    return UBUS_STATUS_UNKNOWN_ERROR;
 }
 
 static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_object *obj, struct ubus_request_data *req, UNUSED const char *method, struct blob_attr *msg)
@@ -298,10 +366,10 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     bool enable = 0;
     const char *alias = "";
     int rem = 0;
-    JSON_Value *forwarders_root_value = json_value_init_array();
-    JSON_Array *forwarders = json_value_get_array(forwarders_root_value);
-    JSON_Value *zones_root_value = json_value_init_array();
-    JSON_Array *zones = json_value_get_array(zones_root_value);
+    JSON_Value *forwarders_root_value = NULL;
+    JSON_Array *forwarders = NULL;
+    JSON_Value *zones_root_value = NULL;
+    JSON_Array *zones = NULL;
     const char *interface = "";
     const char *address = "";
     int port = 0;
@@ -309,6 +377,7 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     int cache_min_ttl = 0;
     int cache_max_ttl = 0;
     relay_server_data_t *data = NULL;
+    int ret = -1; // Default return value for failure
 
     memset(&b, 0, sizeof(b));
     blob_buf_init(&b, 0);
@@ -316,7 +385,7 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     if (blobmsg_parse(add_relay_server_policy, ARRAY_SIZE(add_relay_server_policy), tb, blob_data(msg), blob_len(msg)) != 0)
     {
         blobmsg_add_string(&b, "Error", "Invalid arguments");
-        goto exit_0;
+        goto cleanup;
     }
 
     if (tb[ADD_RELAY_SERVER_ENABLE])
@@ -335,8 +404,24 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     else
     {
         blobmsg_add_string(&b, "Error", "Missing Alias argument");
-        goto exit_0;
+        goto cleanup;
     }
+
+    forwarders_root_value = json_value_init_array();
+    if (!forwarders_root_value)
+    {
+        blobmsg_add_string(&b, "Error", "Failed to initialize forwarders array");
+        goto cleanup;
+    }
+    forwarders = json_value_get_array(forwarders_root_value);
+
+    zones_root_value = json_value_init_array();
+    if (!zones_root_value)
+    {
+        blobmsg_add_string(&b, "Error", "Failed to initialize zones array");
+        goto cleanup;
+    }
+    zones = json_value_get_array(zones_root_value);
 
     if (tb[ADD_RELAY_SERVER_FORWARDERS])
     {
@@ -352,7 +437,7 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     else
     {
         blobmsg_add_string(&b, "Error", "Missing Forwarders argument");
-        goto exit_0;
+        goto cleanup;
     }
 
     if (tb[ADD_RELAY_SERVER_ZONES])
@@ -369,7 +454,7 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     else
     {
         blobmsg_add_string(&b, "Error", "Missing Zones argument");
-        goto exit_0;
+        goto cleanup;
     }
 
     if (tb[ADD_RELAY_SERVER_INTERFACE])
@@ -379,7 +464,7 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     else
     {
         blobmsg_add_string(&b, "Error", "Missing Interface argument");
-        goto exit_0;
+        goto cleanup;
     }
 
     if (tb[ADD_RELAY_SERVER_ADDRESS])
@@ -389,7 +474,7 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     else
     {
         blobmsg_add_string(&b, "Error", "Missing Address argument");
-        goto exit_0;
+        goto cleanup;
     }
 
     if (tb[ADD_RELAY_SERVER_PORT])
@@ -399,7 +484,7 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     else
     {
         blobmsg_add_string(&b, "Error", "Missing Port argument");
-        goto exit_0;
+        goto cleanup;
     }
 
     if (tb[ADD_RELAY_SERVER_CACHE_SIZE])
@@ -422,37 +507,33 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
 
     if (!relay_server_add(mod_ubus->relay_servers, data))
     {
-        goto exit_1;
+        blobmsg_add_string(&b, "Error", "Failed to add relay server");
+        goto cleanup;
     }
 
     blobmsg_add_string(&b, "Status", "Ok");
+    ret = 0;
 
-    relay_server_data_cleanup(&data);
+cleanup:
+    if (data)
+    {
+        relay_server_data_cleanup(&data);
+    }
 
-    json_value_free(forwarders_root_value);
+    if (forwarders_root_value)
+    {
+        json_value_free(forwarders_root_value);
+    }
 
-    json_value_free(zones_root_value);
-
-    ubus_send_reply(ctx, req, b.head);
-
-    blob_buf_free(&b);
-
-    return 0;
-
-exit_1:
-    relay_server_data_cleanup(&data);
-
-exit_0:
-
-    blobmsg_add_string(&b, "Status", "Failed");
-
-    json_value_free(forwarders_root_value);
+    if (zones_root_value)
+    {
+        json_value_free(zones_root_value);
+    }
 
     ubus_send_reply(ctx, req, b.head);
-
     blob_buf_free(&b);
 
-    return -1;
+    return ret;
 }
 
 static struct ubus_method jojodns_methods[] = {
