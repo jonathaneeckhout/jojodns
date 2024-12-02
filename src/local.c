@@ -39,6 +39,7 @@ local_host_t *local_host_init(const char *name, size_t count, struct in_addr *a_
 
 exit_1:
     free(host->name);
+    free(host);
 exit_0:
     return NULL;
 }

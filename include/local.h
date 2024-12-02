@@ -15,12 +15,7 @@ typedef struct _local_host_t
     struct in_addr *a_addr_list;
 } local_host_t;
 
-typedef struct _local_host_entry_t
-{
-    char *name;
-    size_t count;
-    struct in_addr *a_addr_list;
-} local_host_entry_t;
+typedef local_host_t local_host_entry_t;
 
 local_t *local_init(local_host_t **hosts, size_t hosts_count);
 void local_cleanup(local_t **local);
