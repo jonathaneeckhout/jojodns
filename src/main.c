@@ -125,7 +125,6 @@ static bool init(struct arguments *arguments)
         goto exit_0;
     }
 
-    // Load the tiled generated json file
     config_data = json_parse_file(arguments->config_file);
     if (config_data == NULL)
     {
