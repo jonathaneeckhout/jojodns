@@ -162,72 +162,54 @@ static void server_dns_send_local_response(struct evdns_server_request *req, con
 static void server_dns_request_callback(struct evdns_server_request *req, void *data)
 {
     server_t *server = (server_t *)data;
-    struct evdns_server_question *q = NULL;
+    const struct evdns_server_question *q = NULL;
     const cache_entry_t *cache_entry = NULL;
+    const local_host_entry_t *local_entry = NULL;
+    server_request_t *server_request = NULL;
+    struct evdns_request *new_req = NULL;
 
-    if (req->questions == NULL || req->nquestions <= 0)
-    {
-        log_error("Invalid DNS questions or no questions available");
-        evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
-        return;
-    }
-
-    // Only one question a time is currently supported
     q = req->questions[0];
-
-    log_debug("Received DNS query for name=[%s], class=[%d], type=[%d]", q->name, q->dns_question_class, q->type);
-
     cache_entry = cache_get_entry(server->cache, q->name);
+
     if (cache_entry != NULL && cache_entry->type == q->type)
     {
         log_debug("Cache hit DNS query name=[%s]", q->name);
         server_dns_send_cache_response(req, cache_entry);
         return;
     }
-    else
+
+    local_entry = local_get_entry(server->local, q->name);
+    if (local_entry != NULL)
     {
-        server_request_t *server_request = server_request_init(server, req, q->name, q->type);
-        if (server_request == NULL)
-        {
-            evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
-            return;
-        }
-
-        switch (q->type)
-        {
-        case EVDNS_TYPE_A:
-        {
-            const local_host_entry_t *local_entry = local_get_entry(server->local, q->name);
-            if (local_entry != NULL)
-            {
-                server_dns_send_local_response(req, local_entry);
-                server_request_cleanup(&server_request);
-                return;
-            }
-            struct evdns_request *new_req = evdns_base_resolve_ipv4(server->client->dns_base, q->name, 0, server_dns_response_ipv4_callback, server_request);
-            if (new_req == NULL)
-            {
-                evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
-                server_request_cleanup(&server_request);
-            }
-            break;
-        }
-        case EVDNS_TYPE_AAAA:
-        {
-            struct evdns_request *new_req = evdns_base_resolve_ipv6(server->client->dns_base, q->name, 0, server_dns_response_ipv6_callback, server_request);
-            if (new_req == NULL)
-            {
-                evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
-                server_request_cleanup(&server_request);
-            }
-            break;
-        }
-        default:
-            evdns_server_request_respond(req, DNS_ERR_NOTIMPL);
-            server_request_cleanup(&server_request);
-        }
-
+        server_dns_send_local_response(req, local_entry);
         return;
+    }
+
+    server_request = server_request_init(server, req, q->name, q->type);
+    if (server_request == NULL)
+    {
+        evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
+        return;
+    }
+
+    switch (q->type)
+    {
+    case EVDNS_TYPE_A:
+        new_req = evdns_base_resolve_ipv4(server->client->dns_base, q->name, 0, server_dns_response_ipv4_callback, server_request);
+        break;
+    case EVDNS_TYPE_AAAA:
+        new_req = evdns_base_resolve_ipv6(server->client->dns_base, q->name, 0, server_dns_response_ipv6_callback, server_request);
+        break;
+    default:
+        evdns_server_request_respond(req, DNS_ERR_NOTIMPL);
+        server_request_cleanup(&server_request);
+        return;
+    }
+
+    if (new_req == NULL)
+    {
+        evdns_server_request_respond(req, DNS_ERR_SERVERFAILED);
+        server_request_cleanup(&server_request);
     }
 }
 
@@ -268,25 +250,24 @@ exit_1:
 
 static evutil_socket_t server_bind_interface_socket(const char *interface, int port)
 {
-    evutil_socket_t sock = 0;
-    struct sockaddr_in addr;
+    evutil_socket_t sock;
+    struct sockaddr_in addr = {0};
 
     sock = socket(PF_INET, SOCK_DGRAM, 0);
     if (sock == -1)
     {
         log_error("Failed to create server socket");
-        goto exit_1;
+        return -1;
     }
 
     evutil_make_socket_nonblocking(sock);
 
     if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, interface, strlen(interface)) != 0)
     {
-        perror("setsockopt SO_BINDTODEVICE failed");
-        goto exit_2;
+        log_error("Setsockopt SO_BINDTODEVICE failed");
+        close(sock);
+        return -1;
     }
-
-    memset(&addr, 0, sizeof(struct sockaddr_in));
 
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
@@ -295,17 +276,12 @@ static evutil_socket_t server_bind_interface_socket(const char *interface, int p
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
     {
         log_error("Failed to bind to server socket");
-        goto exit_2;
+        close(sock);
+        return -1;
     }
 
     log_info("DNS relay server socket bound to interface=[%s] on port=[%d]", interface, port);
-
     return sock;
-
-exit_2:
-    close(sock);
-exit_1:
-    return -1;
 }
 
 server_t *server_init(struct event_base *base, client_t *client, local_t *local, const char *interface, const char *address, int port)
