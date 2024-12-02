@@ -45,7 +45,7 @@ bool relay_forwarders_add(relay_forwarders_t *relay_forwarders, relay_forwarder_
         goto exit_0;
     }
 
-    client = client_init(relay_forwarders->base, json_value_get_array(data->nameservers));
+    client = client_init(relay_forwarders->base, data->nameservers, data->nameserver_count);
     if (client == NULL)
     {
         log_error("Failed to init forwarder=[%s]", data->alias);
@@ -71,11 +71,69 @@ exit_0:
 
 static void add_config_forwarder(relay_forwarders_t *relay_forwarders, JSON_Object *forwarder)
 {
-    const char *alias = json_object_get_string(forwarder, "Alias");
-    JSON_Array *nameservers = json_object_get_array(forwarder, "DNSServers");
-    relay_forwarder_data_t *data = relay_forwarder_data_init(alias, nameservers);
+    const char *alias = NULL;
+    JSON_Array *json_nameservers = NULL;
+    size_t json_nameservers_count = 0;
+    const char **nameservers = NULL;
+    size_t i = 0;
+    relay_forwarder_data_t *data = NULL;
 
-    relay_forwarders_add(relay_forwarders, data);
+    if (relay_forwarders == NULL || forwarder == NULL)
+    {
+        log_error("Invalid arguments: relay_forwarders or forwarder is NULL");
+        return;
+    }
+
+    alias = json_object_get_string(forwarder, "Alias");
+    if (alias == NULL || strlen(alias) == 0)
+    {
+        log_warning("Skipping forwarder: Invalid or missing alias");
+        return;
+    }
+
+    json_nameservers = json_object_get_array(forwarder, "DNSServers");
+    json_nameservers_count = json_nameservers ? json_array_get_count(json_nameservers) : 0;
+
+    if (json_nameservers_count > 0)
+    {
+        nameservers = calloc(json_nameservers_count, sizeof(char *));
+        if (nameservers == NULL)
+        {
+            log_error("Failed to allocate memory for nameservers");
+            return;
+        }
+
+        for (i = 0; i < json_nameservers_count; i++)
+        {
+            const char *nameserver = json_array_get_string(json_nameservers, i);
+            if (nameserver == NULL || strlen(nameserver) == 0)
+            {
+                log_warning("Skipping invalid nameserver at index %zu", i);
+                continue;
+            }
+            nameservers[i] = nameserver;
+        }
+
+        data = relay_forwarder_data_init(alias, (char **)nameservers, json_nameservers_count);
+        if (data == NULL)
+        {
+            log_error("Failed to initialize relay forwarder data for alias [%s]", alias);
+            free(nameservers);
+            return;
+        }
+
+        if (!relay_forwarders_add(relay_forwarders, data))
+        {
+            log_error("Failed to add forwarder for alias [%s]", alias);
+            relay_forwarder_data_cleanup(&data);
+        }
+
+        free(nameservers);
+    }
+    else
+    {
+        log_warning("No valid nameservers found for alias [%s]", alias);
+    }
 }
 
 relay_forwarders_t *relay_forwarders_init(struct event_base *base, JSON_Value *config_data)
@@ -138,10 +196,9 @@ void relay_forwarders_cleanup(relay_forwarders_t **relay_forwarders)
     relay_forwarders = NULL;
 }
 
-relay_forwarder_data_t *relay_forwarder_data_init(const char *alias, JSON_Array *nameservers)
+relay_forwarder_data_t *relay_forwarder_data_init(const char *alias, char **nameservers, size_t nameserver_count)
 {
-    size_t servers_count = 0;
-    JSON_Array *json_nameservers = NULL;
+    size_t nameserver_count_copy = 0;
     relay_forwarder_data_t *relay_forwarder_data = (relay_forwarder_data_t *)calloc(1, sizeof(relay_forwarder_data_t));
     if (relay_forwarder_data == NULL)
     {
@@ -150,17 +207,43 @@ relay_forwarder_data_t *relay_forwarder_data_init(const char *alias, JSON_Array 
     }
 
     relay_forwarder_data->alias = strdup(alias);
-    relay_forwarder_data->nameservers = json_value_init_array();
-    json_nameservers = json_value_get_array(relay_forwarder_data->nameservers);
-
-    servers_count = json_array_get_count(nameservers);
-    for (size_t i = 0; i < servers_count; i++)
+    if (relay_forwarder_data->alias == NULL)
     {
-        json_array_append_string(json_nameservers, json_array_get_string(nameservers, i));
+        log_error("Failed to allocate memory for alias");
+        goto exit_1;
     }
 
+    relay_forwarder_data->nameservers = (char **)calloc(nameserver_count, sizeof(char *));
+    if (relay_forwarder_data->nameservers == NULL)
+    {
+        log_error("Failed to allocate memory for nameservers array");
+        goto exit_2;
+    }
+
+    for (size_t i = 0; i < nameserver_count; i++)
+    {
+        relay_forwarder_data->nameservers[i] = strdup(nameservers[i]);
+        if (relay_forwarder_data->nameservers[i] == NULL)
+        {
+            log_error("Failed to allocate memory for nameserver[%zu]", i);
+            nameserver_count_copy = i;
+            goto exit_3;
+        }
+    }
+
+    relay_forwarder_data->nameserver_count = nameserver_count;
     return relay_forwarder_data;
 
+exit_3:
+    for (size_t i = 0; i < nameserver_count_copy; i++)
+    {
+        free(relay_forwarder_data->nameservers[i]);
+    }
+    free(relay_forwarder_data->nameservers);
+exit_2:
+    free(relay_forwarder_data->alias);
+exit_1:
+    free(relay_forwarder_data);
 exit_0:
     return NULL;
 }
@@ -168,8 +251,11 @@ exit_0:
 void relay_forwarder_data_cleanup(relay_forwarder_data_t **relay_forwarder_data)
 {
     free((*relay_forwarder_data)->alias);
-    json_value_free((*relay_forwarder_data)->nameservers);
-
+    for (size_t i = 0; i < (*relay_forwarder_data)->nameserver_count; i++)
+    {
+        free((*relay_forwarder_data)->nameservers[i]);
+    }
+    free((*relay_forwarder_data)->nameservers);
     free(*relay_forwarder_data);
     relay_forwarder_data = NULL;
 }

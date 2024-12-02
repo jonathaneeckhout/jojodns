@@ -152,8 +152,6 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     while (hashmap_iter(mod_ubus->relay_forwarders->forwarders, &iter, &item))
     {
         void *dnsservers_array = NULL;
-        size_t dnsservers_count = 0;
-        JSON_Array *json_dnsservers = NULL;
         relay_forwarder_t *entry = item;
 
         void *forwarding_entry = blobmsg_open_table(&b, NULL);
@@ -163,11 +161,9 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
 
         dnsservers_array = blobmsg_open_array(&b, "DNSServers");
 
-        json_dnsservers = json_value_get_array(entry->data->nameservers);
-        dnsservers_count = json_array_get_count(json_dnsservers);
-        for (size_t i = 0; i < dnsservers_count; i++)
+        for (size_t i = 0; i < entry->data->nameserver_count; i++)
         {
-            blobmsg_add_string(&b, NULL, json_array_get_string(json_dnsservers, i));
+            blobmsg_add_string(&b, NULL, entry->data->nameservers[i]);
         }
 
         blobmsg_close_array(&b, dnsservers_array);
@@ -195,10 +191,10 @@ static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_obje
     struct blob_attr *tb[__ADD_RELAY_FORWARDER_MAX];
     struct blob_attr *cur = NULL;
     const char *alias = "";
-    int rem = 0;
-    JSON_Value *dnsservers_root_value = json_value_init_array();
-    JSON_Array *nameservers = json_value_get_array(dnsservers_root_value);
+    char **nameservers = NULL;
+    size_t nameserver_count = 0;
     relay_forwarder_data_t *data = NULL;
+    int rem = 0;
 
     blobmsg_parse(add_relay_forwarder_policy, ARRAY_SIZE(add_relay_forwarder_policy), tb, blob_data(msg), blob_len(msg));
 
@@ -209,17 +205,44 @@ static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_obje
 
     if (tb[ADD_RELAY_FORWARDER_DNSSERVERS])
     {
+        size_t index = 0;
+
         blobmsg_for_each_attr(cur, tb[ADD_RELAY_FORWARDER_DNSSERVERS], rem)
         {
             if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING)
             {
-                const char *dns_server = blobmsg_get_string(cur);
-                json_array_append_string(nameservers, dns_server);
+                nameserver_count++;
+            }
+        }
+
+        nameservers = (char **)calloc(nameserver_count, sizeof(char *));
+        if (nameservers == NULL)
+        {
+            log_error("Failed to allocate memory for nameservers");
+            goto cleanup;
+        }
+
+        blobmsg_for_each_attr(cur, tb[ADD_RELAY_FORWARDER_DNSSERVERS], rem)
+        {
+            if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING)
+            {
+                nameservers[index] = strdup(blobmsg_get_string(cur));
+                if (nameservers[index] == NULL)
+                {
+                    log_error("Failed to allocate memory for nameserver[%zu]", index);
+                    goto cleanup;
+                }
+                index++;
             }
         }
     }
 
-    data = relay_forwarder_data_init(alias, nameservers);
+    data = relay_forwarder_data_init(alias, nameservers, nameserver_count);
+    if (data == NULL)
+    {
+        log_error("Failed to initialize relay forwarder data");
+        goto cleanup;
+    }
 
     memset(&b, 0, sizeof(b));
     blob_buf_init(&b, 0);
@@ -233,11 +256,19 @@ static int add_relay_forwarder(struct ubus_context *ctx, UNUSED struct ubus_obje
         blobmsg_add_string(&b, "Status", "Failed");
     }
 
-    json_value_free(dnsservers_root_value);
+cleanup:
+    if (nameservers)
+    {
+        for (size_t i = 0; i < nameserver_count; i++)
+        {
+            free(nameservers[i]);
+        }
+        free(nameservers);
+    }
 
     ubus_send_reply(ctx, req, b.head);
-
     blob_buf_free(&b);
+
     return 0;
 }
 

@@ -2,12 +2,11 @@
 #include <stdbool.h>
 #include <string.h>
 #include <event2/dns.h>
-#include <parson.h>
 
 #include "logging.h"
 #include "client.h"
 
-client_t *client_init(struct event_base *base, JSON_Array *nameservers)
+client_t *client_init(struct event_base *base, char **nameservers, size_t nameserver_count)
 {
     client_t *client = (client_t *)malloc(sizeof(client_t));
     if (client == NULL)
@@ -16,7 +15,7 @@ client_t *client_init(struct event_base *base, JSON_Array *nameservers)
         goto exit_0;
     }
 
-    if (nameservers != NULL && json_array_get_count(nameservers) > 0)
+    if (nameservers != NULL && nameserver_count > 0)
     {
         client->dns_base = evdns_base_new(base, 0x0);
     }
@@ -34,11 +33,11 @@ client_t *client_init(struct event_base *base, JSON_Array *nameservers)
 
     log_debug("Created a new DNS client");
 
-    if (nameservers != NULL && json_array_get_count(nameservers) > 0)
+    if (nameservers != NULL && nameserver_count > 0)
     {
-        for (size_t i = 0; i < json_array_get_count(nameservers); i++)
+        for (size_t i = 0; i < nameserver_count; i++)
         {
-            const char *nameserver = json_array_get_string(nameservers, i);
+            const char *nameserver = nameservers[i];
 
             if (evdns_base_nameserver_ip_add(client->dns_base, nameserver) != 0)
             {

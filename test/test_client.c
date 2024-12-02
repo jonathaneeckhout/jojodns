@@ -28,12 +28,10 @@ static void test_client_init_with_nameserver(UNUSED void **state)
     struct event_base *base = event_base_new();
     assert_non_null(base);
 
-    JSON_Value *root_value = json_value_init_object();
+    char *nameservers[] = {"8.8.8.8"};
+    size_t nameserver_count = 1;
 
-    JSON_Array *nameservers = json_value_get_array(root_value);
-    json_array_append_string(nameservers, "8.8.8.8");
-
-    client_t *client = client_init(base, nameservers);
+    client_t *client = client_init(base, nameservers, nameserver_count);
 
     assert_non_null(client);
     assert_non_null(client->dns_base);
@@ -41,7 +39,6 @@ static void test_client_init_with_nameserver(UNUSED void **state)
     client_cleanup(&client);
     assert_null(client);
 
-    json_value_free(root_value);
     event_base_free(base);
 }
 
@@ -50,7 +47,7 @@ static void test_client_init_without_nameserver(UNUSED void **state)
     struct event_base *base = event_base_new();
     assert_non_null(base);
 
-    client_t *client = client_init(base, NULL);
+    client_t *client = client_init(base, NULL, 0);
 
     assert_non_null(client);
     assert_non_null(client->dns_base);
@@ -66,7 +63,7 @@ static void test_client_cleanup(UNUSED void **state)
     struct event_base *base = event_base_new();
     assert_non_null(base);
 
-    client_t *client = client_init(base, NULL);
+    client_t *client = client_init(base, NULL, 0);
     client_cleanup(&client);
     assert_null(client);
 
