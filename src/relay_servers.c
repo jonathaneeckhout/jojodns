@@ -36,6 +36,8 @@ bool relay_server_add(relay_servers_t *relay_servers, relay_server_data_t *data)
     server_t *server = NULL;
     const relay_forwarder_t *forwarder = NULL;
     relay_forwarder_data_t relay_data;
+    const zone_t *zone = NULL;
+    zone_data_t zone_data;
     relay_server_data_t *copy_of_data = NULL;
 
     if (data->alias == NULL || strlen(data->alias) == 0)
@@ -66,7 +68,17 @@ bool relay_server_add(relay_servers_t *relay_servers, relay_server_data_t *data)
         goto exit_0;
     }
 
-    server = server_init(relay_servers->base, forwarder->client, data->interface, data->address, data->port);
+    memset(&zone_data, 0, sizeof(zone_data_t));
+    zone_data.alias = data->zone_name;
+
+    zone = hashmap_get(relay_servers->zones->zones, &(zone_t){.data = &zone_data});
+    if (zone == NULL)
+    {
+        log_warning("Could not find zone with name=[%s]", forwarder->data->alias);
+        goto exit_0;
+    }
+
+    server = server_init(relay_servers->base, forwarder->client, zone->local, data->interface, data->address, data->port);
     if (server == NULL)
     {
         log_error("Failed to init server=[%s]", data->alias);
@@ -131,6 +143,8 @@ static void add_config_server(relay_servers_t *relay_servers, JSON_Object *serve
     const char *alias = json_object_get_string(server_obj, "Alias");
     // Currently only support 1 client per server
     const char *forwarder_name = json_object_get_string(server_obj, "Forwarders");
+    // Currently only support 1 zone per server
+    const char *zone_name = json_object_get_string(server_obj, "Zones");
     const char *interface = json_object_get_string(server_obj, "Interface");
     const char *address = json_object_get_string(server_obj, "Address");
     int port = json_object_get_number(server_obj, "Port");
@@ -138,7 +152,7 @@ static void add_config_server(relay_servers_t *relay_servers, JSON_Object *serve
     int cache_min_ttl = json_object_get_number(server_obj, "CacheMinTTL");
     int cache_max_ttl = json_object_get_number(server_obj, "CacheMaxTTL");
 
-    data = relay_server_data_init(true, alias, forwarder_name, interface, address, port, cache_size, cache_min_ttl, cache_max_ttl);
+    data = relay_server_data_init(true, alias, forwarder_name, zone_name, interface, address, port, cache_size, cache_min_ttl, cache_max_ttl);
     if (data == NULL)
     {
         log_error("Failed to init relay server data");
@@ -150,7 +164,7 @@ static void add_config_server(relay_servers_t *relay_servers, JSON_Object *serve
     relay_server_data_cleanup(&data);
 }
 
-relay_servers_t *relay_servers_init(struct event_base *base, relay_forwarders_t *relay_forwarders, JSON_Value *config_data)
+relay_servers_t *relay_servers_init(struct event_base *base, relay_forwarders_t *relay_forwarders, zones_t *zones, JSON_Value *config_data)
 {
     JSON_Array *servers = NULL;
     size_t servers_count = 0;
@@ -171,6 +185,7 @@ relay_servers_t *relay_servers_init(struct event_base *base, relay_forwarders_t 
 
     relay_servers->base = base;
     relay_servers->relay_forwarders = relay_forwarders;
+    relay_servers->zones = zones;
 
     relay_servers->servers = hashmap_new(sizeof(relay_server_t), 0, 0, 0, relay_servers_hash, relay_servers_compare, relay_servers_free, NULL);
     if (relay_servers->servers == NULL)
@@ -216,7 +231,7 @@ void relay_servers_cleanup(relay_servers_t **relay_servers)
     relay_servers = NULL;
 }
 
-relay_server_data_t *relay_server_data_init(bool enable, const char *alias, const char *forwarder_name, const char *interface, const char *address, int port, size_t cache_size, int cache_min_ttl, int cache_max_ttl)
+relay_server_data_t *relay_server_data_init(bool enable, const char *alias, const char *forwarder_name, const char *zone_name, const char *interface, const char *address, int port, size_t cache_size, int cache_min_ttl, int cache_max_ttl)
 {
     relay_server_data_t *relay_server_data = (relay_server_data_t *)calloc(1, sizeof(relay_server_data_t));
     if (relay_server_data == NULL)
@@ -228,6 +243,7 @@ relay_server_data_t *relay_server_data_init(bool enable, const char *alias, cons
     relay_server_data->enable = enable;
     relay_server_data->alias = strdup(alias);
     relay_server_data->forwarder_name = strdup(forwarder_name);
+    relay_server_data->zone_name = strdup(zone_name);
     relay_server_data->interface = strdup(interface);
     relay_server_data->address = strdup(address);
     relay_server_data->port = port;
@@ -245,6 +261,7 @@ void relay_server_data_cleanup(relay_server_data_t **relay_server_data)
 {
     free((*relay_server_data)->alias);
     free((*relay_server_data)->forwarder_name);
+    free((*relay_server_data)->zone_name);
     free((*relay_server_data)->interface);
     free((*relay_server_data)->address);
 
@@ -254,5 +271,5 @@ void relay_server_data_cleanup(relay_server_data_t **relay_server_data)
 
 relay_server_data_t *relay_server_data_copy(relay_server_data_t *data)
 {
-    return relay_server_data_init(data->enable, data->alias, data->forwarder_name, data->interface, data->address, data->port, data->cache_size, data->cache_min_ttl, data->cache_max_ttl);
+    return relay_server_data_init(data->enable, data->alias, data->forwarder_name, data->zone_name, data->interface, data->address, data->port, data->cache_size, data->cache_min_ttl, data->cache_max_ttl);
 }

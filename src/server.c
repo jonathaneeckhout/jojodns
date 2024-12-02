@@ -148,6 +148,17 @@ static void server_dns_send_cache_response(struct evdns_server_request *req, con
     evdns_server_request_respond(req, DNS_ERR_NONE);
 }
 
+static void server_dns_send_local_response(struct evdns_server_request *req, const local_host_entry_t *entry)
+{
+    for (size_t i = 0; i < entry->count; ++i)
+    {
+
+        evdns_server_request_add_a_reply(req, entry->name, 1, &entry->a_addr_list[i].s_addr, 0);
+    }
+
+    evdns_server_request_respond(req, DNS_ERR_NONE);
+}
+
 static void server_dns_request_callback(struct evdns_server_request *req, void *data)
 {
     server_t *server = (server_t *)data;
@@ -186,6 +197,13 @@ static void server_dns_request_callback(struct evdns_server_request *req, void *
         {
         case EVDNS_TYPE_A:
         {
+            const local_host_entry_t *local_entry = local_get_entry(server->local, q->name);
+            if (local_entry != NULL)
+            {
+                server_dns_send_local_response(req, local_entry);
+                server_request_cleanup(&server_request);
+                return;
+            }
             struct evdns_request *new_req = evdns_base_resolve_ipv4(server->client->dns_base, q->name, 0, server_dns_response_ipv4_callback, server_request);
             if (new_req == NULL)
             {
@@ -290,7 +308,7 @@ exit_1:
     return -1;
 }
 
-server_t *server_init(struct event_base *base, client_t *client, const char *interface, const char *address, int port)
+server_t *server_init(struct event_base *base, client_t *client, local_t *local, const char *interface, const char *address, int port)
 {
     evutil_socket_t sock;
     server_t *server = (server_t *)calloc(1, sizeof(server_t));
@@ -301,6 +319,7 @@ server_t *server_init(struct event_base *base, client_t *client, const char *int
     }
 
     server->client = client;
+    server->local = local;
 
     if (interface != NULL && strlen(interface) > 0)
     {

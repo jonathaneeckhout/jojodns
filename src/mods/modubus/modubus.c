@@ -5,6 +5,7 @@
 #include <libubox/blobmsg_json.h>
 #include <event2/event.h>
 #include <event2/dns.h>
+#include <arpa/inet.h>
 
 #include "mods/modubus/modubus.h"
 #include "logging.h"
@@ -41,6 +42,7 @@ enum
     ADD_RELAY_SERVER_ENABLE,
     ADD_RELAY_SERVER_ALIAS,
     ADD_RELAY_SERVER_FORWARDERS,
+    ADD_RELAY_SERVER_ZONES,
     ADD_RELAY_SERVER_INTERFACE,
     ADD_RELAY_SERVER_ADDRESS,
     ADD_RELAY_SERVER_PORT,
@@ -54,6 +56,7 @@ static const struct blobmsg_policy add_relay_server_policy[] = {
     [ADD_RELAY_SERVER_ENABLE] = {.name = "Enable", .type = BLOBMSG_TYPE_BOOL},
     [ADD_RELAY_SERVER_ALIAS] = {.name = "Alias", .type = BLOBMSG_TYPE_STRING},
     [ADD_RELAY_SERVER_FORWARDERS] = {.name = "Forwarders", .type = BLOBMSG_TYPE_ARRAY},
+    [ADD_RELAY_SERVER_ZONES] = {.name = "Zones", .type = BLOBMSG_TYPE_ARRAY},
     [ADD_RELAY_SERVER_INTERFACE] = {.name = "Interface", .type = BLOBMSG_TYPE_STRING},
     [ADD_RELAY_SERVER_ADDRESS] = {.name = "Address", .type = BLOBMSG_TYPE_STRING},
     [ADD_RELAY_SERVER_PORT] = {.name = "Port", .type = BLOBMSG_TYPE_INT32},
@@ -85,6 +88,7 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     while (hashmap_iter(mod_ubus->relay_servers->servers, &iter, &item))
     {
         void *forwarders_array = NULL;
+        void *zones_array = NULL;
         relay_server_t *entry = item;
 
         void *server_entry = blobmsg_open_table(&b, NULL);
@@ -95,6 +99,10 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
         forwarders_array = blobmsg_open_array(&b, "Forwarders");
         blobmsg_add_string(&b, NULL, entry->data->forwarder_name);
         blobmsg_close_array(&b, forwarders_array);
+
+        zones_array = blobmsg_open_array(&b, "Zones");
+        blobmsg_add_string(&b, NULL, entry->data->zone_name);
+        blobmsg_close_array(&b, zones_array);
 
         blobmsg_add_string(&b, "Interface", entry->data->interface);
         blobmsg_add_string(&b, "Address", entry->data->address);
@@ -118,7 +126,6 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
     {
         zone_t *entry = item;
         void *hosts_array = NULL;
-        JSON_Array *json_hosts = NULL;
 
         void *zone_entry = blobmsg_open_table(&b, NULL);
 
@@ -126,14 +133,25 @@ static int get_config(struct ubus_context *ctx, UNUSED struct ubus_object *obj, 
         blobmsg_add_string(&b, "Alias", entry->data->alias);
         hosts_array = blobmsg_open_array(&b, "Hosts");
 
-        json_hosts = json_value_get_array(entry->data->hosts);
-
-        for (size_t i = 0; i < json_array_get_count(json_hosts); i++)
+        for (size_t i = 0; i < entry->data->hosts_count; i++)
         {
+            void *host_ip_address_array = NULL;
+
             void *host_entry = blobmsg_open_table(&b, NULL);
-            JSON_Object *host_object = json_array_get_object(json_hosts, i);
-            blobmsg_add_string(&b, "Alias", json_object_get_string(host_object, "Alias"));
-            blobmsg_add_string(&b, "Name", json_object_get_string(host_object, "Name"));
+            // blobmsg_add_string(&b, "Alias", json_object_get_string(host_object, "Alias"));
+            blobmsg_add_string(&b, "Name", entry->data->hosts[i]->name);
+
+            host_ip_address_array = blobmsg_open_array(&b, "IPAddresses");
+
+            for (size_t j = 0; j < entry->data->hosts[i]->count; j++)
+            {
+                char buf[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &entry->data->hosts[i]->a_addr_list[j], buf, sizeof(buf));
+                blobmsg_add_string(&b, NULL, buf);
+            }
+
+            blobmsg_close_array(&b, host_ip_address_array);
+
             blobmsg_close_table(&b, host_entry);
         }
 
@@ -282,6 +300,8 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     int rem = 0;
     JSON_Value *forwarders_root_value = json_value_init_array();
     JSON_Array *forwarders = json_value_get_array(forwarders_root_value);
+    JSON_Value *zones_root_value = json_value_init_array();
+    JSON_Array *zones = json_value_get_array(zones_root_value);
     const char *interface = "";
     const char *address = "";
     int port = 0;
@@ -335,6 +355,23 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
         goto exit_0;
     }
 
+    if (tb[ADD_RELAY_SERVER_ZONES])
+    {
+        blobmsg_for_each_attr(cur, tb[ADD_RELAY_SERVER_ZONES], rem)
+        {
+            if (blobmsg_type(cur) == BLOBMSG_TYPE_STRING)
+            {
+                const char *zone = blobmsg_get_string(cur);
+                json_array_append_string(zones, zone);
+            }
+        }
+    }
+    else
+    {
+        blobmsg_add_string(&b, "Error", "Missing Zones argument");
+        goto exit_0;
+    }
+
     if (tb[ADD_RELAY_SERVER_INTERFACE])
     {
         interface = blobmsg_get_string(tb[ADD_RELAY_SERVER_INTERFACE]);
@@ -381,7 +418,7 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     }
 
     // Currently only 1 forwarder per server is supported
-    data = relay_server_data_init(enable, alias, json_array_get_string(forwarders, 0), interface, address, port, cache_size, cache_min_ttl, cache_max_ttl);
+    data = relay_server_data_init(enable, alias, json_array_get_string(forwarders, 0), json_array_get_string(zones, 0), interface, address, port, cache_size, cache_min_ttl, cache_max_ttl);
 
     if (!relay_server_add(mod_ubus->relay_servers, data))
     {
@@ -393,6 +430,8 @@ static int add_relay_server(UNUSED struct ubus_context *ctx, UNUSED struct ubus_
     relay_server_data_cleanup(&data);
 
     json_value_free(forwarders_root_value);
+
+    json_value_free(zones_root_value);
 
     ubus_send_reply(ctx, req, b.head);
 

@@ -2,21 +2,59 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
-#include <parson.h>
+#include <netinet/in.h>
 
 #include "logging.h"
 #include "local.h"
 
 #define UNUSED __attribute__((unused))
 
-typedef struct _local_host_entry_t
+local_host_t *local_host_init(const char *name, size_t count, struct in_addr *a_addr_list)
 {
-    char *name;
-    char type;
-    int count;
-    struct in_addr *a_addr_list;
-    struct in6_addr *aaaa_addr_list;
-} local_host_entry_t;
+    local_host_t *host = (local_host_t *)malloc(sizeof(local_host_t));
+    if (!host)
+    {
+        log_error("Failed to allocate memory for local_host_t");
+        goto exit_0;
+    }
+
+    host->name = strdup(name);
+    if (!host->name)
+    {
+        log_error("Failed to allocate memory for name");
+        goto exit_1;
+    }
+
+    host->count = count;
+    host->a_addr_list = (struct in_addr *)malloc(sizeof(struct in_addr) * count);
+    if (!host->a_addr_list)
+    {
+        log_error("Failed to allocate memory for addr_list");
+        goto exit_1;
+    }
+
+    memcpy(host->a_addr_list, a_addr_list, sizeof(struct in_addr) * count);
+
+    return host;
+
+exit_1:
+    free(host->name);
+exit_0:
+    return NULL;
+}
+
+void local_host_cleanup(local_host_t **host)
+{
+    free((*host)->name);
+    free((*host)->a_addr_list);
+    free(*host);
+    *host = NULL;
+}
+
+local_host_t *local_host_copy(const local_host_t *host)
+{
+    return local_host_init(host->name, host->count, host->a_addr_list);
+}
 
 const local_host_entry_t *local_get_entry(local_t *local, const char *name)
 {
@@ -29,7 +67,7 @@ const local_host_entry_t *local_get_entry(local_t *local, const char *name)
     return (const local_host_entry_t *)data;
 }
 
-static local_host_entry_t *local_host_entry_init(JSON_Object *host)
+static local_host_entry_t *local_host_entry_init(local_host_t *host)
 {
     local_host_entry_t *entry = (local_host_entry_t *)malloc(sizeof(local_host_entry_t));
     if (!entry)
@@ -38,15 +76,27 @@ static local_host_entry_t *local_host_entry_init(JSON_Object *host)
         goto exit_0;
     }
 
-    entry->name = strdup(json_object_get_string(host, "Name"));
+    entry->name = strdup(host->name);
+    if (!entry->name)
+    {
+        log_error("Failed to allocate memory for name");
+        goto exit_1;
+    }
 
-    entry->type = 0;
-    entry->count = 0;
-    entry->a_addr_list = NULL;
-    entry->aaaa_addr_list = NULL;
+    entry->count = host->count;
+    entry->a_addr_list = (struct in_addr *)malloc(sizeof(struct in_addr) * host->count);
+    if (!entry->a_addr_list)
+    {
+        log_error("Failed to allocate memory for addr_list");
+        goto exit_1;
+    }
+
+    memcpy(entry->a_addr_list, host->a_addr_list, sizeof(struct in_addr) * host->count);
 
     return entry;
 
+exit_1:
+    free(entry);
 exit_0:
     return NULL;
 }
@@ -55,7 +105,6 @@ static void local_host_entry_cleanup_content(local_host_entry_t *entry)
 {
     free(entry->name);
     free(entry->a_addr_list);
-    free(entry->aaaa_addr_list);
 }
 
 void local_host_entry_cleanup(local_host_entry_t **entry)
@@ -90,17 +139,23 @@ static uint64_t local_hash(const void *item, uint64_t seed0, uint64_t seed1)
     return hashmap_sip(enrty->name, strlen(enrty->name), seed0, seed1);
 }
 
-void local_add_host(local_t *local, JSON_Object *host)
+bool local_add_host(local_t *local, local_host_t *host)
 {
     local_host_entry_t *entry = local_host_entry_init(host);
+    if (!entry)
+    {
+        return false;
+    }
 
     hashmap_set(local->hosts, entry);
 
     // Only the pointer should be freed as the rest will be cleaned up with the custom free
     free(entry);
+
+    return true;
 }
 
-local_t *local_init(JSON_Array *hosts)
+local_t *local_init(local_host_t **hosts, size_t hosts_count)
 {
     local_t *local = (local_t *)calloc(1, sizeof(local_t));
     if (local == NULL)
@@ -116,15 +171,22 @@ local_t *local_init(JSON_Array *hosts)
         goto exit_1;
     }
 
-    for (size_t i = 0; i < json_array_get_count(hosts); i++)
+    for (size_t i = 0; i < hosts_count; i++)
     {
-        local_add_host(local, json_array_get_object(hosts, i));
+        if (!local_add_host(local, hosts[i]))
+        {
+            log_error("Failed to add host");
+            goto exit_2;
+        }
     }
 
     log_debug("Created a new DNS local host");
 
     return local;
 
+exit_2:
+    hashmap_clear(local->hosts, true);
+    hashmap_free(local->hosts);
 exit_1:
     free(local);
 exit_0:

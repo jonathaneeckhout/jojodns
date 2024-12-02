@@ -2,6 +2,7 @@
 #include <hashmap.h>
 #include <parson.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 #include "logging.h"
 #include "zones.h"
@@ -45,7 +46,7 @@ bool zones_add(zones_t *zones, zone_data_t *data)
         goto exit_0;
     }
 
-    local = local_init(json_value_get_array(data->hosts));
+    local = local_init(data->hosts, data->hosts_count);
     if (local == NULL)
     {
         log_error("Failed to init local=[%s]", data->alias);
@@ -80,13 +81,75 @@ exit_0:
 
 static void add_config_zones(zones_t *zones, JSON_Object *zone)
 {
-    const char *alias = json_object_get_string(zone, "Alias");
-    JSON_Array *hosts = json_object_get_array(zone, "Hosts");
-    zone_data_t *data = zone_data_init(alias, hosts);
+    const char *zone_alias = NULL;
+    JSON_Array *json_hosts = NULL;
+    size_t json_hosts_count = 0;
+    local_host_t **hosts = NULL;
+    size_t hosts_count = 0;
+    size_t i = 0;
+    zone_data_t *data = NULL;
 
-    zones_add(zones, data);
+    zone_alias = json_object_get_string(zone, "Alias");
+    json_hosts = json_object_get_array(zone, "Hosts");
+    json_hosts_count = json_array_get_count(json_hosts);
 
-    zone_data_cleanup(&data);
+    hosts = (local_host_t **)malloc(sizeof(local_host_t *) * json_hosts_count);
+    if (hosts == NULL)
+    {
+        log_error("Failed to allocate memory for hosts");
+        return;
+    }
+
+    for (i = 0; i < json_hosts_count; i++)
+    {
+        local_host_t *local_host = NULL;
+        JSON_Object *host = NULL;
+        const char *host_name = NULL;
+        JSON_Array *ip_addresses = NULL;
+        size_t ip_count = 0;
+        struct in_addr *a_addr_list = NULL;
+        size_t j = 0;
+
+        host = json_array_get_object(json_hosts, i);
+        host_name = json_object_get_string(host, "Name");
+        ip_addresses = json_object_get_array(host, "IPAddresses");
+        ip_count = json_array_get_count(ip_addresses);
+
+        a_addr_list = (struct in_addr *)malloc(sizeof(struct in_addr) * ip_count);
+        if (a_addr_list == NULL)
+        {
+            log_error("Failed to allocate memory for addr_list");
+            continue;
+        }
+
+        for (j = 0; j < ip_count; j++)
+        {
+            const char *ip_address = json_array_get_string(ip_addresses, j);
+            inet_pton(AF_INET, ip_address, &a_addr_list[j]);
+            log_debug("Adding zone=[%s] host=[%s] ip=[%s]", zone_alias, host_name, ip_address);
+        }
+
+        local_host = local_host_init(host_name, ip_count, a_addr_list);
+        if (local_host != NULL)
+        {
+            hosts[hosts_count++] = local_host;
+        }
+
+        free(a_addr_list);
+    }
+
+    data = zone_data_init(zone_alias, hosts, hosts_count);
+    if (data != NULL)
+    {
+        zones_add(zones, data);
+        zone_data_cleanup(&data);
+    }
+
+    for (i = 0; i < hosts_count; i++)
+    {
+        local_host_cleanup(&hosts[i]);
+    }
+    free(hosts);
 }
 
 zones_t *zones_init(JSON_Value *config_data)
@@ -145,10 +208,8 @@ void zones_cleanup(zones_t **zones)
     zones = NULL;
 }
 
-zone_data_t *zone_data_init(const char *alias, JSON_Array *hosts)
+zone_data_t *zone_data_init(const char *alias, local_host_t **hosts, size_t hosts_count)
 {
-    size_t hosts_count = 0;
-    JSON_Array *json_hosts = NULL;
     zone_data_t *zone_data = (zone_data_t *)calloc(1, sizeof(zone_data_t));
     if (zone_data == NULL)
     {
@@ -157,18 +218,31 @@ zone_data_t *zone_data_init(const char *alias, JSON_Array *hosts)
     }
 
     zone_data->alias = strdup(alias);
-    zone_data->hosts = json_value_init_array();
-    json_hosts = json_value_get_array(zone_data->hosts);
+    if (zone_data->alias == NULL)
+    {
+        log_error("Failed to allocate memory for alias");
+        goto exit_1;
+    }
 
-    hosts_count = json_array_get_count(hosts);
+    zone_data->hosts = (local_host_t **)calloc(hosts_count, sizeof(local_host_t *));
+    if (zone_data->hosts == NULL)
+    {
+        log_error("Failed to allocate memory for hosts array");
+        goto exit_2;
+    }
+
     for (size_t i = 0; i < hosts_count; i++)
     {
-        JSON_Value *host_value = json_value_deep_copy(json_array_get_value(hosts, i));
-        json_array_append_value(json_hosts, host_value);
+        zone_data->hosts[i] = local_host_copy(hosts[i]);
     }
+    zone_data->hosts_count = hosts_count;
 
     return zone_data;
 
+exit_2:
+    free(zone_data->alias);
+exit_1:
+    free(zone_data);
 exit_0:
     return NULL;
 }
@@ -176,7 +250,12 @@ exit_0:
 void zone_data_cleanup(zone_data_t **zone_data)
 {
     free((*zone_data)->alias);
-    json_value_free((*zone_data)->hosts);
+
+    for (size_t i = 0; i < (*zone_data)->hosts_count; i++)
+    {
+        local_host_cleanup(&(*zone_data)->hosts[i]);
+    }
+    free((*zone_data)->hosts);
 
     free(*zone_data);
     zone_data = NULL;
@@ -184,5 +263,5 @@ void zone_data_cleanup(zone_data_t **zone_data)
 
 zone_data_t *zone_data_copy(zone_data_t *data)
 {
-    return zone_data_init(data->alias, json_value_get_array(data->hosts));
+    return zone_data_init(data->alias, data->hosts, data->hosts_count);
 }

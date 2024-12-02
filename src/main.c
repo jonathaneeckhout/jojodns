@@ -139,17 +139,17 @@ static bool init(struct arguments *arguments)
         goto exit_2;
     }
 
-    jojodns.relay_servers = relay_servers_init(jojodns.base, jojodns.relay_forwarders, config_data);
-    if (jojodns.relay_servers == NULL)
-    {
-        log_error("Failed to init relay servers");
-        goto exit_3;
-    }
-
     jojodns.zones = zones_init(config_data);
     if (jojodns.zones == NULL)
     {
         log_error("Failed to init zones");
+        goto exit_3;
+    }
+
+    jojodns.relay_servers = relay_servers_init(jojodns.base, jojodns.relay_forwarders, jojodns.zones, config_data);
+    if (jojodns.relay_servers == NULL)
+    {
+        log_error("Failed to init relay servers");
         goto exit_4;
     }
 
@@ -164,9 +164,9 @@ static bool init(struct arguments *arguments)
     return true;
 
 exit_5:
-    zones_cleanup(&jojodns.zones);
-exit_4:
     relay_servers_cleanup(&jojodns.relay_servers);
+exit_4:
+    zones_cleanup(&jojodns.zones);
 exit_3:
     relay_forwarders_cleanup(&jojodns.relay_forwarders);
 exit_2:
