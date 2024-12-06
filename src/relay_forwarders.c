@@ -33,6 +33,12 @@ bool relay_forwarders_add(relay_forwarders_t *relay_forwarders, relay_forwarder_
 {
     client_t *client = NULL;
 
+    if (relay_forwarders == NULL || data == NULL)
+    {
+        log_error("Invalid arguments: relay_forwarders or data is NULL");
+        goto exit_0;
+    }
+
     if (data->alias == NULL || strlen(data->alias) == 0)
     {
         log_warning("Failed to add forwarder, invalid alias");
@@ -69,7 +75,7 @@ exit_0:
     return false;
 }
 
-static void add_config_forwarder(relay_forwarders_t *relay_forwarders, JSON_Object *forwarder)
+static bool add_config_forwarder(relay_forwarders_t *relay_forwarders, JSON_Object *forwarder)
 {
     const char *alias = NULL;
     JSON_Array *json_nameservers = NULL;
@@ -81,26 +87,31 @@ static void add_config_forwarder(relay_forwarders_t *relay_forwarders, JSON_Obje
     if (relay_forwarders == NULL || forwarder == NULL)
     {
         log_error("Invalid arguments: relay_forwarders or forwarder is NULL");
-        return;
+        return false;
     }
 
     alias = json_object_get_string(forwarder, "Alias");
     if (alias == NULL || strlen(alias) == 0)
     {
         log_warning("Skipping forwarder: Invalid or missing alias");
-        return;
+        return false;
     }
 
     json_nameservers = json_object_get_array(forwarder, "DNSServers");
-    json_nameservers_count = json_nameservers ? json_array_get_count(json_nameservers) : 0;
+    if (json_nameservers == NULL)
+    {
+        log_warning("Skipping forwarder: Invalid or missing DNSServers");
+        return false;
+    }
 
+    json_nameservers_count = json_array_get_count(json_nameservers);
     if (json_nameservers_count > 0)
     {
         nameservers = calloc(json_nameservers_count, sizeof(char *));
         if (nameservers == NULL)
         {
             log_error("Failed to allocate memory for nameservers");
-            return;
+            return false;
         }
 
         for (i = 0; i < json_nameservers_count; i++)
@@ -119,24 +130,56 @@ static void add_config_forwarder(relay_forwarders_t *relay_forwarders, JSON_Obje
         {
             log_error("Failed to initialize relay forwarder data for alias [%s]", alias);
             free(nameservers);
-            return;
+            return false;
         }
 
         if (!relay_forwarders_add(relay_forwarders, data))
         {
             log_error("Failed to add forwarder for alias [%s]", alias);
             relay_forwarder_data_cleanup(&data);
+            free(nameservers);
+            return false;
         }
 
         free(nameservers);
     }
-    else
-    {
-        log_warning("No valid nameservers found for alias [%s]", alias);
-    }
+
+    return true;
 }
 
-relay_forwarders_t *relay_forwarders_init(struct event_base *base, JSON_Value *config_data)
+bool relay_forwarders_load_config(relay_forwarders_t *relay_forwarders, JSON_Value *config_data)
+{
+    JSON_Array *forwarders = NULL;
+    size_t forwarders_count = 0;
+
+    if (relay_forwarders == NULL || config_data == NULL)
+    {
+        log_error("Invalid arguments: relay_forwarders or config_data is NULL");
+        return false;
+    }
+
+    forwarders = json_object_dotget_array(json_object(config_data), "Relay.Forwarding");
+    if (forwarders == NULL)
+    {
+        log_warning("No forwarders found in config");
+        return true;
+    }
+
+    forwarders_count = json_array_get_count(forwarders);
+    for (size_t i = 0; i < forwarders_count; i++)
+    {
+        JSON_Object *forwarder = json_array_get_object(forwarders, i);
+        if (!add_config_forwarder(relay_forwarders, forwarder))
+        {
+            log_error("Failed to add forwarder at index %zu", i);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+relay_forwarders_t *relay_forwarders_init(struct event_base *base)
 {
     relay_forwarders_t *relay_forwarders = NULL;
 
@@ -162,20 +205,6 @@ relay_forwarders_t *relay_forwarders_init(struct event_base *base, JSON_Value *c
         goto exit_1;
     }
 
-    if (config_data != NULL)
-    {
-        JSON_Array *forwarders = json_object_dotget_array(json_object(config_data), "Relay.Forwarding");
-        if (forwarders != NULL)
-        {
-            size_t forwarders_count = json_array_get_count(forwarders);
-            for (size_t i = 0; i < forwarders_count; i++)
-            {
-                JSON_Object *forwarder = json_array_get_object(forwarders, i);
-                add_config_forwarder(relay_forwarders, forwarder);
-            }
-        }
-    }
-
     return relay_forwarders;
 
 exit_1:
@@ -193,7 +222,7 @@ void relay_forwarders_cleanup(relay_forwarders_t **relay_forwarders)
     }
 
     free(*relay_forwarders);
-    relay_forwarders = NULL;
+    *relay_forwarders = NULL;
 }
 
 relay_forwarder_data_t *relay_forwarder_data_init(const char *alias, char **nameservers, size_t nameserver_count)

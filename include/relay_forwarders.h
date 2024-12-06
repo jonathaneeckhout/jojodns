@@ -26,8 +26,9 @@ typedef struct _relay_forwarders_t
     struct hashmap *forwarders;
 } relay_forwarders_t;
 
-relay_forwarders_t *relay_forwarders_init(struct event_base *base, JSON_Value *config_data);
+relay_forwarders_t *relay_forwarders_init(struct event_base *base);
 void relay_forwarders_cleanup(relay_forwarders_t **relay_forwarders);
+bool relay_forwarders_load_config(relay_forwarders_t *relay_forwarders, JSON_Value *config_data);
 bool relay_forwarders_add(relay_forwarders_t *relay_forwarders, relay_forwarder_data_t *data);
 
 relay_forwarder_data_t *relay_forwarder_data_init(const char *alias, char **nameservers, size_t nameserver_count);

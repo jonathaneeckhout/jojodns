@@ -9,6 +9,7 @@
 #include "test_common.h"
 #include "test_client.h"
 #include "test_server.h"
+#include "test_relay_forwarders.h"
 
 bool bind_failed = false;
 bool calloc_failed = false;
@@ -80,6 +81,17 @@ int main(void)
         cmocka_unit_test(test_server_init_null_local),
         cmocka_unit_test_setup_teardown(test_server_calloc_fail, test_setup, test_teardown),
         cmocka_unit_test(test_server_cleanup),
+        cmocka_unit_test(test_relay_forwarders_init),
+        cmocka_unit_test(test_relays_forwarders_init_null_base),
+        cmocka_unit_test(test_relays_forwarders_cleanup),
+        cmocka_unit_test(test_relay_forwarders_add),
+        cmocka_unit_test(test_relay_forwarders_add_null_data),
+        cmocka_unit_test(test_relay_forwarders_add_duplicate),
+        cmocka_unit_test(test_relay_forwarders_load_config),
+        cmocka_unit_test(test_relay_forwarders_load_config_no_forwarders),
+        cmocka_unit_test(test_relay_forwarders_load_config_no_alias),
+        cmocka_unit_test(test_relay_forwarders_load_config_no_dnsservers),
+        cmocka_unit_test(test_relay_forwarders_load_config_null_data),
     };
     return cmocka_run_group_tests(tests, suite_setup, suite_teardown);
 }

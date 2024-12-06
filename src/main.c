@@ -132,11 +132,17 @@ static bool init(struct arguments *arguments)
         goto exit_1;
     }
 
-    jojodns.relay_forwarders = relay_forwarders_init(jojodns.base, config_data);
+    jojodns.relay_forwarders = relay_forwarders_init(jojodns.base);
     if (jojodns.relay_forwarders == NULL)
     {
         log_error("Failed to init relay forwarders");
         goto exit_2;
+    }
+
+    if (!relay_forwarders_load_config(jojodns.relay_forwarders, config_data))
+    {
+        log_error("Failed to load relay forwarders config");
+        goto exit_3;
     }
 
     jojodns.zones = zones_init(config_data);
