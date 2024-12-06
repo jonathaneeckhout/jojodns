@@ -94,6 +94,7 @@ make coverage
 
 Show coverage report in a html page. Make sure you did the previous step and you're in the build directory.
 ``` bash
+cd test
 genhtml coverage.info --output-directory coverage_report
 firefox coverage_report/index.html
 ```

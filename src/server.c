@@ -287,7 +287,27 @@ static evutil_socket_t server_bind_interface_socket(const char *interface, int p
 server_t *server_init(struct event_base *base, client_t *client, local_t *local, const char *interface, const char *address, int port)
 {
     evutil_socket_t sock;
-    server_t *server = (server_t *)calloc(1, sizeof(server_t));
+    server_t *server = NULL;
+
+    if (base == NULL)
+    {
+        log_error("Invalid event base");
+        goto exit_0;
+    }
+
+    if (client == NULL)
+    {
+        log_error("Invalid client");
+        goto exit_0;
+    }
+
+    if (local == NULL)
+    {
+        log_error("Invalid local");
+        goto exit_0;
+    }
+
+    server = (server_t *)calloc(1, sizeof(server_t));
     if (server == NULL)
     {
         log_error("Failed to allocate memory for server_t");

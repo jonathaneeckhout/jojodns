@@ -26,12 +26,16 @@ target_include_directories(jojodns_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../
 # Link test executable with libraries
 target_link_libraries(jojodns_tests ${CMOCKA_LIBRARIES} hashmapc parson ${LIBEVENT_LIBRARIES})
 
+# Add linker option to wrap bind function
+target_link_options(jojodns_tests PRIVATE -Wl,--wrap=bind -Wl,--wrap=calloc)
+
 # Add a custom target to run tests
 add_test(NAME JojoDNS_Tests COMMAND jojodns_tests)
 
 # Add a custom target to collect code coverage after running tests
 # This uses lcov to collect coverage data and generate a report
 enable_testing()
+
 add_custom_target(coverage
     COMMAND ${CMAKE_COMMAND} -E env "GCOV_PREFIX=${CMAKE_BINARY_DIR}/cov" "GCOV_PREFIX_STRIP=2" lcov --capture --directory . --output-file coverage.info
     COMMAND lcov --remove coverage.info '/test/*' --output-file coverage.info
